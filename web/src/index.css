@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    /* Evita el zoom raro al rotar el celular. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-slate-100 text-ink antialiased;
+    @apply dark:bg-slate-950 dark:text-slate-100;
+    /* Respeta la barra de gestos de Android en modo standalone. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Los montos SIEMPRE en tabular: si los dígitos no se alinean en una
+     columna de plata, comparar de un vistazo se vuelve imposible. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200;
+    @apply dark:bg-slate-900 dark:ring-slate-800;
+  }
+
+  .label {
+    @apply text-xs font-medium uppercase tracking-wide text-ink-mute dark:text-slate-400;
+  }
+
+  .input {
+    @apply w-full rounded-xl border-0 bg-slate-100 px-4 py-3 text-base text-ink ring-1 ring-inset ring-slate-200;
+    @apply placeholder:text-slate-400 focus:ring-2 focus:ring-ant focus:outline-none;
+    @apply dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700;
+  }
+
+  .btn {
+    @apply rounded-xl px-4 py-3 text-base font-semibold transition active:scale-[0.98];
+  }
+
+  .btn-primary {
+    @apply btn bg-ant text-white hover:bg-ant-deep disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply btn bg-slate-200 text-ink hover:bg-slate-300;
+    @apply dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700;
+  }
+
+  .chip {
+    @apply rounded-full px-3 py-1.5 text-sm font-medium transition;
+  }
+}

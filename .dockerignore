@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+dist
+**/dist
+data
+**/data
+*.db
+*.db-wal
+*.db-shm
+.git
+.env
+.env.*
+!.env.example
+*.log
+dev-dist

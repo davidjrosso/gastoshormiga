@@ -1,0 +1,29 @@
+node_modules/
+dist/
+*.local
+
+# La base de datos NUNCA va al repo: son los gastos reales de tu casa.
+# Un push distraído a un repo público los publica para siempre.
+data/
+*.db
+*.db-wal
+*.db-shm
+
+.env
+.env.*
+!.env.example
+
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+dev-dist/
+
+*.tsbuildinfo
+
+# Datos concretos del despliegue (IP, usuario, rutas). El repo es publico.
+DEPLOY.local.md
+*.local.md
