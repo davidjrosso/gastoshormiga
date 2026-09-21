@@ -140,6 +140,17 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX holdings_household_idx ON holdings(household_id);
   `,
+
+  // v2 — quién paga un gasto fijo
+  //
+  // Los fijos materializados nacían sin `paid_by_user_id`, así que el alquiler,
+  // las expensas y la prepaga —lo más pesado del mes— quedaban afuera de
+  // "Quién pagó qué". La regla es el único lugar donde esa información puede
+  // vivir: el gasto lo genera el sistema, no la persona que abre la app.
+  // Nullable a propósito: un fijo que sale de la cuenta conjunta no es de nadie.
+  `
+  ALTER TABLE recurring_rules ADD COLUMN paid_by_user_id TEXT;
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

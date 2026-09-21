@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { requireAuth, type AppEnv } from '../auth.js';
 import { db } from '../db/index.js';
 import { recurringRules, transactions } from '../db/schema.js';
-import { getRateForDate, type RateType } from '../fx/rates.js';
+import { getRateForDate, householdRateType } from '../fx/rates.js';
 import { parseAmountToMinor, todayISO } from '../lib/money.js';
 
 export const recurringRoutes = new Hono<AppEnv>();
@@ -25,6 +25,9 @@ export function generateRecurring(householdId: string, period: string, userId?: 
     .all();
 
   let created = 0;
+  // Se resuelve una vez por corrida y no por regla: es la misma consulta para
+  // todas, y el hogar no cambia de cotización en medio del bucle.
+  const rateType = householdRateType(householdId);
 
   for (const rule of rules) {
     if (rule.lastGeneratedPeriod === period) continue;
@@ -50,8 +53,9 @@ export function generateRecurring(householdId: string, period: string, userId?: 
           merchantId: rule.merchantId,
           note: rule.description,
           recurringRuleId: rule.id,
+          paidByUserId: rule.paidByUserId,
           createdByUserId: userId ?? null,
-          usdRateMinor: getRateForDate('blue' as RateType, date),
+          usdRateMinor: getRateForDate(rateType, date),
         })
         .run();
 
@@ -88,6 +92,7 @@ recurringRoutes.post('/', async (c) => {
       accountId: z.string(),
       categoryId: z.string().nullable().optional(),
       dayOfMonth: z.number().int().min(1).max(31).default(1),
+      paidByUserId: z.string().nullable().optional(),
     })
     .safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
@@ -102,6 +107,7 @@ recurringRoutes.post('/', async (c) => {
       accountId: parsed.data.accountId,
       categoryId: parsed.data.categoryId ?? null,
       dayOfMonth: parsed.data.dayOfMonth,
+      paidByUserId: parsed.data.paidByUserId ?? null,
     })
     .returning()
     .all()[0];
@@ -118,6 +124,7 @@ recurringRoutes.patch('/:id', async (c) => {
   if (body.dayOfMonth != null) updates.dayOfMonth = body.dayOfMonth;
   if (body.active != null) updates.active = Boolean(body.active);
   if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
+  if (body.paidByUserId !== undefined) updates.paidByUserId = body.paidByUserId;
   if (Object.keys(updates).length === 0) return c.json({ error: 'Nada para actualizar' }, 400);
 
   const row = db

@@ -167,6 +167,11 @@ export const recurringRules = sqliteTable('recurring_rules', {
   merchantId: text('merchant_id'),
   dayOfMonth: integer('day_of_month').notNull().default(1),
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  // Quién pone la plata para este fijo. Va en la regla y no en la transacción
+  // porque el gasto lo genera el sistema, no la persona que abre la app:
+  // atribuirlo a quien disparó la generación sería inventar un dato.
+  // Nullable a propósito — un fijo que sale de la cuenta conjunta no es de nadie.
+  paidByUserId: text('paid_by_user_id'),
   // Último período materializado, 'YYYY-MM'. Evita duplicar al re-ejecutar.
   lastGeneratedPeriod: text('last_generated_period'),
   createdAt: now(),

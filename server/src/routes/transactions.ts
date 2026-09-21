@@ -3,8 +3,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireAuth, type AppEnv } from '../auth.js';
 import { db } from '../db/index.js';
-import { accounts, categories, households, merchants, transactions } from '../db/schema.js';
-import { getRateForDate, type RateType } from '../fx/rates.js';
+import { accounts, categories, merchants, transactions } from '../db/schema.js';
+import { getRateForDate, householdRateType } from '../fx/rates.js';
 import { normalizeMerchantName, parseAmountToMinor, periodRange, todayISO } from '../lib/money.js';
 
 export const transactionRoutes = new Hono<AppEnv>();
@@ -29,11 +29,6 @@ function resolveMerchant(householdId: string, name: string | undefined | null): 
     .values({ householdId, name: name.trim(), normalizedName: normalized })
     .returning()
     .all()[0].id;
-}
-
-function householdRateType(householdId: string): RateType {
-  const h = db.select().from(households).where(eq(households.id, householdId)).limit(1).all();
-  return (h[0]?.fxRateType ?? 'blue') as RateType;
 }
 
 const createSchema = z.object({

@@ -1,6 +1,6 @@
 import { and, desc, eq, lte } from 'drizzle-orm';
 import { db } from '../db/index.js';
-import { fxRates } from '../db/schema.js';
+import { fxRates, households } from '../db/schema.js';
 import { todayISO } from '../lib/money.js';
 
 /**
@@ -16,6 +16,24 @@ import { todayISO } from '../lib/money.js';
  */
 
 export type RateType = 'blue' | 'oficial' | 'mep' | 'cripto';
+
+/**
+ * Qué cotización usa este hogar para valuar en USD.
+ *
+ * Vive acá y no en una ruta porque lo necesita todo lo que congela un tipo de
+ * cambio: la carga manual de un movimiento y la materialización de los gastos
+ * fijos. Tenerlo duplicado fue exactamente lo que dejó a los fijos valuados en
+ * blue aunque el hogar tuviera configurado "oficial" en Ajustes.
+ */
+export function householdRateType(householdId: string): RateType {
+  const row = db
+    .select({ fxRateType: households.fxRateType })
+    .from(households)
+    .where(eq(households.id, householdId))
+    .limit(1)
+    .all();
+  return (row[0]?.fxRateType ?? 'blue') as RateType;
+}
 
 const ENDPOINTS: Record<RateType, string> = {
   blue: 'https://dolarapi.com/v1/dolares/blue',
