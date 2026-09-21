@@ -86,12 +86,24 @@ export interface Transaction {
   amountToMinor: number | null;
   currencyTo: string | null;
   note: string | null;
+  categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
   categoryIcon: string | null;
   merchantName: string | null;
   accountName: string | null;
   paidByUserId: string | null;
+}
+
+/** Lo que la pantalla de edición puede cambiar. El tipo y la cuenta no
+ *  se tocan: ver el comentario del PATCH en el server. */
+export interface TransactionEdit {
+  amount?: string;
+  date?: string;
+  categoryId?: string | null;
+  merchantName?: string | null;
+  note?: string | null;
+  paidByUserId?: string | null;
 }
 
 export interface Summary {
@@ -198,6 +210,8 @@ export interface RecurringRule {
   dayOfMonth: number;
   active: boolean;
   lastGeneratedPeriod: string | null;
+  /** Quién pone la plata para este fijo. Null = sale de la cuenta conjunta. */
+  paidByUserId: string | null;
 }
 
 // --- Endpoints -------------------------------------------------------------
@@ -255,6 +269,8 @@ export const api = {
     return get<Transaction[]>(`/transactions${qs ? `?${qs}` : ''}`);
   },
   createTransaction: (data: Record<string, unknown>) => post<Transaction>('/transactions', data),
+  updateTransaction: (id: string, data: TransactionEdit) =>
+    patch<Transaction>(`/transactions/${id}`, data),
   deleteTransaction: (id: string) => del<{ ok: true }>(`/transactions/${id}`),
 
   recurring: () => get<RecurringRule[]>('/recurring'),
@@ -264,6 +280,7 @@ export const api = {
     accountId: string;
     categoryId?: string | null;
     dayOfMonth: number;
+    paidByUserId?: string | null;
   }) => post<RecurringRule>('/recurring', data),
   updateRecurring: (id: string, data: Record<string, unknown>) =>
     patch<RecurringRule>(`/recurring/${id}`, data),

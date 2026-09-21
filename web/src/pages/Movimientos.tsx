@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useAuth, useRefresh } from '../App';
+import EditTransaction from '../components/EditTransaction';
 import { api, type Transaction } from '../lib/api';
 import { currentPeriod, dayLabel, money, periodLabel, shiftPeriod } from '../lib/format';
 
 export default function Movimientos() {
   const [period, setPeriod] = useState(currentPeriod());
   const [items, setItems] = useState<Transaction[]>([]);
+  const [editing, setEditing] = useState<Transaction | null>(null);
   const [filter, setFilter] = useState<'todos' | 'gasto' | 'ingreso' | 'transferencia'>('todos');
   const [paidBy, setPaidBy] = useState<string>('');
   const { token, bump } = useRefresh();
@@ -110,6 +112,13 @@ export default function Movimientos() {
           <div className="card divide-y divide-slate-100 p-0 dark:divide-slate-800">
             {txs.map((t) => (
               <div key={t.id} className="flex items-center gap-3 p-3">
+                {/* El renglón entero abre la edición. El blanco de toque en un
+                    celular tiene que ser la fila, no un ícono de lápiz de 16px. */}
+                <button
+                  onClick={() => setEditing(t)}
+                  className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  aria-label={`Editar ${t.merchantName ?? t.note ?? t.categoryName ?? 'movimiento'}`}
+                >
                 <span
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base"
                   style={{ backgroundColor: `${t.categoryColor ?? '#94a3b8'}22` }}
@@ -152,6 +161,7 @@ export default function Movimientos() {
                     </p>
                   )}
                 </div>
+                </button>
 
                 <button
                   onClick={() => remove(t.id)}
@@ -165,6 +175,14 @@ export default function Movimientos() {
           </div>
         </div>
       ))}
+
+      {editing && (
+        <EditTransaction
+          tx={editing}
+          onClose={() => setEditing(null)}
+          onSaved={bump}
+        />
+      )}
     </div>
   );
 }

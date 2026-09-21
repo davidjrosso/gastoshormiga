@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useRefresh } from '../App';
+import { useAuth, useRefresh } from '../App';
 import { api, type Account, type Category, type RecurringRule } from '../lib/api';
 import { money, moneyShort } from '../lib/format';
 
@@ -13,12 +13,15 @@ export default function Fijos() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [adding, setAdding] = useState(false);
   const { token, bump } = useRefresh();
+  const { me } = useAuth();
+  const miembros = me?.members ?? [];
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [accountId, setAccountId] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [dayOfMonth, setDayOfMonth] = useState(1);
+  const [paidByUserId, setPaidByUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -44,8 +47,10 @@ export default function Fijos() {
         accountId,
         categoryId: categoryId || null,
         dayOfMonth,
+        paidByUserId,
       });
       setDescription(''); setAmount(''); setCategoryId(''); setDayOfMonth(1);
+      setPaidByUserId(null);
       setAdding(false);
       bump();
     } catch (err) {
@@ -55,6 +60,14 @@ export default function Fijos() {
 
   async function toggle(rule: RecurringRule) {
     await api.updateRecurring(rule.id, { active: !rule.active });
+    bump();
+  }
+
+  /** Quién pone la plata para este fijo. Se puede cambiar sobre la regla ya
+   *  creada: los fijos que venían de antes nacieron sin este dato y sería
+   *  absurdo obligar a borrarlos y recargarlos solo para asignarlo. */
+  async function setPaidBy(rule: RecurringRule, userId: string | null) {
+    await api.updateRecurring(rule.id, { paidByUserId: rule.paidByUserId === userId ? null : userId });
     bump();
   }
 
@@ -103,6 +116,33 @@ export default function Fijos() {
                 {money(r.amountMinor, r.currency as 'ARS' | 'USD', false)}
               </span>
             </div>
+            {miembros.length > 1 && (
+              <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-800">
+                <p className="label mb-2">Quién lo paga</p>
+                <div className="flex flex-wrap gap-2">
+                  {miembros.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => setPaidBy(r, m.id)}
+                      className={`chip ring-1 ${
+                        r.paidByUserId === m.id
+                          ? 'bg-ink text-white ring-transparent dark:bg-white dark:text-ink'
+                          : 'bg-white text-ink ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800'
+                      }`}
+                    >
+                      {m.displayName}
+                      {m.id === me?.user.id && <span className="ml-1 opacity-60">(vos)</span>}
+                    </button>
+                  ))}
+                </div>
+                {r.paidByUserId === null && (
+                  <p className="mt-2 text-xs text-ink-mute dark:text-slate-400">
+                    Sin asignar: no suma a nadie en "Quién pagó qué".
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="mt-3 flex gap-2">
               <button onClick={() => toggle(r)} className="chip bg-slate-100 text-ink dark:bg-slate-800 dark:text-slate-200">
                 {r.active ? 'Pausar' : 'Reactivar'}
@@ -153,6 +193,31 @@ export default function Fijos() {
               ))}
             </select>
           </div>
+
+          {miembros.length > 1 && (
+            <div>
+              <p className="label mb-2">Quién lo paga</p>
+              <div className="flex flex-wrap gap-2">
+                {miembros.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setPaidByUserId(paidByUserId === m.id ? null : m.id)}
+                    className={`chip ring-1 ${
+                      paidByUserId === m.id
+                        ? 'bg-ink text-white ring-transparent dark:bg-white dark:text-ink'
+                        : 'bg-white text-ink ring-slate-200 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800'
+                    }`}
+                  >
+                    {m.displayName}
+                    {m.id === me?.user.id && <span className="ml-1 opacity-60">(vos)</span>}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-ink-mute dark:text-slate-400">
+                Si sale de la cuenta conjunta, dejalo sin elegir.
+              </p>
+            </div>
+          )}
 
           {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 

@@ -1,0 +1,12 @@
+{
+  // El build de producción compila solo `src`: los tests no tienen por qué
+  // terminar en `dist`. Pero eso los dejaba fuera del typecheck, o sea que un
+  // error de tipos en un test solo aparecía al correrlo. Este proyecto los
+  // incluye sin emitir nada.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}

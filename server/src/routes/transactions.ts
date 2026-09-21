@@ -184,10 +184,29 @@ transactionRoutes.get('/', (c) => {
   );
 });
 
+/**
+ * Campos editables de un movimiento.
+ *
+ * A propósito NO se puede cambiar el `type` ni la cuenta: pasar un gasto a
+ * transferencia implica validar cuenta destino, monto recibido y moneda, y
+ * media edición mal hecha deja una transferencia sin destino, que rompe los
+ * saldos en silencio. Para eso está borrar y volver a cargar.
+ */
+const updateSchema = z.object({
+  amount: z.union([z.string(), z.number()]).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida').optional(),
+  categoryId: z.string().nullable().optional(),
+  merchantName: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  paidByUserId: z.string().nullable().optional(),
+});
+
 transactionRoutes.patch('/:id', async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
-  const body = await c.req.json().catch(() => ({}));
+  const parsed = updateSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: parsed.error.issues[0].message }, 400);
+  const d = parsed.data;
 
   const existing = db
     .select()
@@ -198,12 +217,38 @@ transactionRoutes.patch('/:id', async (c) => {
   if (existing.length === 0) return c.json({ error: 'No encontrado' }, 404);
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  if (body.amount != null) updates.amountMinor = Math.abs(parseAmountToMinor(body.amount));
-  if (body.date) updates.date = body.date;
-  if (body.categoryId !== undefined) updates.categoryId = body.categoryId;
-  if (body.note !== undefined) updates.note = body.note;
-  if (body.merchantName !== undefined) {
-    updates.merchantId = resolveMerchant(user.householdId, body.merchantName);
+
+  if (d.amount != null) {
+    let amountMinor: number;
+    try {
+      amountMinor = Math.abs(parseAmountToMinor(d.amount));
+    } catch (err) {
+      return c.json({ error: (err as Error).message }, 400);
+    }
+    if (amountMinor === 0) return c.json({ error: 'El monto no puede ser cero' }, 400);
+    updates.amountMinor = amountMinor;
+  }
+
+  if (d.date && d.date !== existing[0].date) {
+    updates.date = d.date;
+    // Recongelamos la cotización al día corregido. Si no, un movimiento que se
+    // cargó con fecha equivocada queda valuado en USD contra el dólar de otro
+    // día, y toda la comparación entre meses —que es el punto de guardar la
+    // cotización— pasa a apoyarse en un dato que sabemos falso.
+    //
+    // Pero solo si conseguimos una: sin internet la tabla de cotizaciones
+    // puede estar vacía, y pisar con null una cotización que ya teníamos
+    // deja el movimiento sin valuar a cambio de nada. Preferimos una
+    // cotización de un día cercano antes que ninguna.
+    const rate = getRateForDate(householdRateType(user.householdId), d.date);
+    if (rate !== null) updates.usdRateMinor = rate;
+  }
+
+  if (d.categoryId !== undefined) updates.categoryId = d.categoryId;
+  if (d.note !== undefined) updates.note = d.note;
+  if (d.paidByUserId !== undefined) updates.paidByUserId = d.paidByUserId;
+  if (d.merchantName !== undefined) {
+    updates.merchantId = resolveMerchant(user.householdId, d.merchantName);
   }
 
   const row = db.update(transactions).set(updates).where(eq(transactions.id, id)).returning().all()[0];

@@ -29,6 +29,21 @@ export function moneyShort(minor: number, currency: 'ARS' | 'USD' = 'ARS'): stri
   return `${sign}${symbol} ${abs.toLocaleString('es-AR', { maximumFractionDigits: 0 })}`;
 }
 
+/**
+ * Monto listo para meter en un input de edición.
+ *
+ * Sin separador de miles a propósito: "3.000" vuelve a entrar por
+ * `parseAmountToMinor`, que tiene que decidir si el punto es miles o decimal.
+ * Es una ambigüedad que no hace falta crear cuando somos nosotros los que
+ * escribimos el valor. Sin puntos, la vuelta es exacta siempre.
+ */
+export function amountForInput(minor: number): string {
+  const abs = Math.abs(minor);
+  const entero = Math.trunc(abs / 100);
+  const centavos = abs % 100;
+  return centavos === 0 ? String(entero) : `${entero},${String(centavos).padStart(2, '0')}`;
+}
+
 export function pct(value: number | null | undefined, withSign = false): string {
   if (value == null) return '—';
   const sign = withSign && value > 0 ? '+' : '';

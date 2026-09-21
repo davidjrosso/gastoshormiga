@@ -69,15 +69,38 @@ mensuales de dólares— y el usuario `demo@hormiga.local` / `demo1234`.
 
 Para empezar de cero, borrá `server/data/hormiga.db` y volvé a arrancar.
 
-### Verificar el motor de análisis
+### Tests
+
+```bash
+cd server && npm test
+```
+
+Corren con `node:test` sobre una base temporal nueva en cada ejecución, así que
+no tocan `data/hormiga.db` ni dependen del seed. No hay framework de testing:
+para un proyecto de este tamaño, una dependencia más que mantener no se paga.
+
+Lo que cubren es lo que se rompe en silencio: el parseo de montos en formato
+argentino, las tres condiciones del detector de gasto hormiga —cada test saca
+una y verifica que el gasto deje de aparecer—, la materialización de los gastos
+fijos, y la edición de movimientos con su aislamiento entre hogares.
+
+```bash
+cd server && npm run typecheck
+```
+
+El `build` compila solo `src`, porque los tests no tienen por qué terminar en
+`dist`. `typecheck` los incluye, que si no un error de tipos en un test recién
+aparece al correrlo.
+
+### Verificar el motor de análisis a ojo
 
 ```bash
 cd server && npx tsx scripts/check.ts
 ```
 
 Imprime por consola el resumen del mes, los goteos detectados, las
-suscripciones y los saldos. Sirve para probar cambios en el motor sin abrir
-el navegador.
+suscripciones y los saldos. Los tests dicen si algo se rompió; esto sirve para
+mirar si los números tienen sentido, que no es lo mismo.
 
 ---
 
@@ -115,6 +138,11 @@ es lo normal en una pareja. Si eso quedara a nombre de quien lo cargó, los
 totales por persona mentirían. Por eso la carga rápida deja elegir quién pagó,
 y ese es el campo que usan los informes.
 
+En un gasto fijo el dato vive en la **regla**, no en la transacción: el
+movimiento lo genera el sistema, así que atribuírselo a quien abrió la app ese
+día sería inventar un dato. Se elige en Ajustes de cada fijo y puede quedar sin
+asignar, que es lo correcto cuando sale de la cuenta conjunta.
+
 ---
 
 ## Cómo funciona el detector de gasto hormiga
@@ -142,6 +170,12 @@ la app puede expresar cualquier gasto pasado en dólares del momento, y mostrar
 las tendencias como porcentaje del ingreso. Comparar septiembre contra marzo en
 pesos nominales no dice nada útil; qué proporción de lo que entró se fue en cada
 cosa, sí.
+
+Si después corregís la fecha de un movimiento, la cotización se vuelve a
+congelar contra el día corregido —si no, quedaría valuado contra el dólar de un
+día que no es—. Pero solo si hay alguna cargada: pisar con nada una cotización
+que ya teníamos dejaría el movimiento sin valuar a cambio de nada, y sin
+internet ese es justo el caso.
 
 Las cotizaciones se traen de [dolarapi.com](https://dolarapi.com) (pública, sin
 API key) cada seis horas. El servidor solo pide el precio del día: no manda
@@ -266,8 +300,6 @@ a querer de verdad.
 - **Etapa 2: IOL.** El esquema ya tiene las tablas `holdings` y las cuentas de
   tipo `inversion` para no tener que migrar cuando lleguemos. Las credenciales
   van a ir por variable de entorno; la app nunca las va a pedir por pantalla.
-- Editar un movimiento desde la interfaz (la API ya soporta `PATCH`, falta la
-  pantalla).
 - Convertir una suscripción detectada en gasto fijo con un toque.
 - Poder ignorar un comercio en el detector, para los goteos que no pensás cortar.
 - Presupuestos por categoría con aviso al pasarse.
