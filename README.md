@@ -20,6 +20,7 @@ hormiga/
 │   ├── src/
 │   │   ├── db/          esquema, migraciones, datos de ejemplo
 │   │   ├── analytics/    detector de hormiga y módulo de ahorro
+│   │   ├── import/       resúmenes de tarjeta: un parser por banco
 │   │   ├── fx/           cotizaciones del dólar
 │   │   ├── routes/       endpoints HTTP
 │   │   └── lib/          plata, fechas, normalización
@@ -82,7 +83,14 @@ para un proyecto de este tamaño, una dependencia más que mantener no se paga.
 Lo que cubren es lo que se rompe en silencio: el parseo de montos en formato
 argentino, las tres condiciones del detector de gasto hormiga —cada test saca
 una y verifica que el gasto deje de aparecer—, la materialización de los gastos
-fijos, y la edición de movimientos con su aislamiento entre hogares.
+fijos, la edición de movimientos con su aislamiento entre hogares, y la
+importación de resúmenes de tarjeta —incluido el caso de subir el mismo PDF dos
+veces, que es lo que cualquiera hace por las dudas—.
+
+El resumen de prueba es **inventado**. Este repo es público y un resumen real
+es el detalle de dónde vive y qué compra una familia: el fixture reproduce el
+formato y las rarezas del banco con datos de fantasía que cierran por
+construcción.
 
 ```bash
 cd server && npm run typecheck
@@ -181,6 +189,84 @@ Las cotizaciones se traen de [dolarapi.com](https://dolarapi.com) (pública, sin
 API key) cada seis horas. El servidor solo pide el precio del día: no manda
 ningún dato tuyo. Si no hay internet, se usa la última cotización conocida, y
 siempre podés cargarla a mano desde Ajustes.
+
+---
+
+## Importar el resumen de la tarjeta
+
+Subís el PDF del resumen y la app carga el mes entero de una. Es la forma más
+barata de cargar gastos que existe: el resumen ya trae el comercio escrito, que
+es justo el campo que uno saltea cuando carga a mano y sin el cual el detector
+de gasto hormiga no ve nada.
+
+**El PDF no se sube a ningún lado.** El texto se extrae en tu propio
+dispositivo con pdf.js y al servidor viaja solo eso, y solo cuando confirmás.
+Un resumen de tarjeta es el detalle de dónde vivís, qué comprás y cuándo
+viajás; no hace falta que salga de tu teléfono para contar renglones.
+
+### Un resumen NO es una lista de gastos
+
+Es la decisión que hace que esto sirva o arruine el mes. Adentro viene
+mezclado, y cada cosa entra distinto:
+
+| Renglón | Entra como | Por qué |
+|---|---|---|
+| Consumo | **Gasto** | Es lo que compraste. |
+| Cuota | **Gasto** con `n/N` | Guardar la cuota evita que el detector vea seis compras repetidas y marque un goteo que no existe. |
+| Interés, sellos, IVA, IIBB | **Gasto** | Del que no se ve: nadie revisa el resumen renglón por renglón. |
+| **Pago de la tarjeta** | **Transferencia** | Cancela una deuda. Contarlo como gasto duplica el consumo del mes anterior. |
+| **Adelanto** | **Transferencia** | Sacaste plata de la tarjeta; el gasto viene después, cuando la uses. |
+| **Percepción RG 5617 (30%)** | **Transferencia** | Vuelve el mes siguiente. Ver abajo. |
+
+### La percepción del 30% no es un gasto
+
+Si pagás el saldo en dólares, ARCA devuelve la percepción del 30% en el resumen
+siguiente (aparece como `CR.RG 5617 30% M`). O sea que no es plata que perdiste:
+es plata tuya en manos del fisco por 30 días.
+
+Cargarla como gasto hace dos daños: el mes figura peor de lo que fue, y al mes
+siguiente aparece un ingreso fantasma que nadie entiende tres meses después. Por
+eso va a una cuenta **"Percepciones a recuperar"**, que la app crea sola, y el
+crédito hace el camino inverso. Es el mismo tratamiento que la compra de
+dólares: plata que cambia de lugar, no que se va.
+
+Como efecto secundario, el saldo de esa cuenta te dice cuánto tenés inmovilizado
+esperando que te lo devuelvan.
+
+> El IVA RG 4240 y la percepción de IIBB **no** vuelven, así que ésos sí entran
+> como gasto. La distinción importa: en un resumen de ejemplo eran $179.313 que
+> volvían contra $19.904 que no.
+
+### Deduplicación
+
+Cada renglón tiene una huella estable —cuenta, cierre del resumen, fecha, cupón,
+importe y cuota— con un índice **UNIQUE** en la base. Reimportar el mismo PDF no
+duplica nada, y la garantía no depende de que la lógica esté bien: la base
+rechaza el duplicado igual.
+
+El cierre del resumen entra en la huella a propósito. Una cuota aparece varios
+meses seguidos con el mismo cupón y el mismo importe, y son cargos distintos:
+sin el cierre, la cuota 4/6 se confundiría con la 3/6 y el importador se comería
+una por mes.
+
+### Nada entra sin que lo veas
+
+Antes de confirmar, la pantalla muestra los renglones uno por uno: cuáles son
+nuevos, cuáles ya estaban, qué entra como gasto y qué como transferencia, y
+cuáles se ignoran **con el motivo**. Importar ochenta renglones a ciegas es la
+forma más rápida de ensuciar una base que después nadie limpia.
+
+Y hay una condición para poder confirmar: el parseo tiene que **cerrar al
+centavo** contra los totales que declara el propio resumen, global y por
+titular. Un parser de PDF no falla con una excepción, falla perdiendo un renglón
+y devolviendo un número creíble; si la suma no da, no se importa nada.
+
+### Agregar otro banco
+
+El parser trabaja sobre el texto ya extraído y devuelve un `ParsedStatement`.
+Todo lo específico del banco vive en un archivo (`server/src/import/bbva-visa.ts`);
+el resto del importador no sabe de dónde vino el resumen. Sumar un banco es
+escribir otro archivo como ése.
 
 ---
 

@@ -151,6 +151,71 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE recurring_rules ADD COLUMN paid_by_user_id TEXT;
   `,
+  // v3 — importación de resúmenes de tarjeta
+  //
+  // Tres cosas que el resumen trae y la app todavía no sabía guardar:
+  //
+  // 1. QUIÉN. Un resumen viene separado por titular y adicionales, y esa gente
+  //    no son usuarios de la app: son personas a las que hay que cobrarles.
+  //    `paid_by_user_id` no sirve para esto, porque apunta a un integrante del
+  //    hogar. Son dos preguntas distintas y necesitan dos campos distintos.
+  //
+  // 2. CUOTAS. "C.03/06" no es una compra nueva: es la tercera de seis de algo
+  //    que compraste hace meses. Sin guardar eso, el detector de gasto hormiga
+  //    ve seis compras repetidas del mismo comercio y marca un goteo que no
+  //    existe. La fecha del renglón es la de la COMPRA original, que es como
+  //    la informa el banco.
+  //
+  // 3. HUELLA. Lo único que hace que reimportar el mismo PDF sea inofensivo.
+  //    Es UNIQUE por hogar: la base rechaza el duplicado aunque falle la
+  //    lógica de arriba. Una defensa que depende solo del código no es una
+  //    defensa.
+  `
+  CREATE TABLE card_holders (
+    id              TEXT PRIMARY KEY,
+    household_id    TEXT NOT NULL REFERENCES households(id),
+    account_id      TEXT NOT NULL REFERENCES accounts(id),
+    name            TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    -- Si el titular ES un integrante del hogar, se enlaza y sus consumos
+    -- entran a "Quién pagó qué". Un adicional de afuera queda en null.
+    user_id         TEXT,
+    is_titular      INTEGER NOT NULL DEFAULT 0,
+    created_at      INTEGER
+  );
+  CREATE UNIQUE INDEX card_holders_acct_name_idx ON card_holders(account_id, normalized_name);
+  CREATE INDEX card_holders_household_idx ON card_holders(household_id);
+
+  CREATE TABLE statement_imports (
+    id             TEXT PRIMARY KEY,
+    household_id   TEXT NOT NULL REFERENCES households(id),
+    account_id     TEXT NOT NULL REFERENCES accounts(id),
+    bank           TEXT NOT NULL,
+    card           TEXT,
+    close_date     TEXT NOT NULL,
+    due_date       TEXT,
+    balance_minor  INTEGER,
+    balance_usd    INTEGER,
+    lines_total    INTEGER NOT NULL DEFAULT 0,
+    lines_imported INTEGER NOT NULL DEFAULT 0,
+    created_by_user_id TEXT,
+    created_at     INTEGER
+  );
+  CREATE INDEX statement_imports_household_idx ON statement_imports(household_id, close_date);
+
+  ALTER TABLE transactions ADD COLUMN card_holder_id TEXT;
+  ALTER TABLE transactions ADD COLUMN installment_n INTEGER;
+  ALTER TABLE transactions ADD COLUMN installment_of INTEGER;
+  ALTER TABLE transactions ADD COLUMN statement_import_id TEXT;
+  ALTER TABLE transactions ADD COLUMN import_fingerprint TEXT;
+  ALTER TABLE transactions ADD COLUMN original_currency TEXT;
+  ALTER TABLE transactions ADD COLUMN original_amount_minor INTEGER;
+
+  CREATE UNIQUE INDEX tx_import_fingerprint_idx
+    ON transactions(household_id, import_fingerprint)
+    WHERE import_fingerprint IS NOT NULL;
+  CREATE INDEX tx_card_holder_idx ON transactions(card_holder_id);
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

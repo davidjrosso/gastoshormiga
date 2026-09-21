@@ -35,8 +35,24 @@ describe('parseFecha', () => {
   });
 });
 
+describe('basura del PDF', () => {
+  it('lee un renglón con glifos del código de barras pegados adelante', () => {
+    // El PDF mete caracteres de su propio código de barras al principio de
+    // algunos renglones ("ËijjggÌ27-Ago-26 INTERESES FINANCIACION"). Con la
+    // fecha anclada al comienzo, ese renglón se perdía entero y en silencio;
+    // la verificación aritmética lo delataba, pero recién al final.
+    const l = r.lines.find((x) => x.description.includes('INTERESES FINANCIACION'));
+    assert.ok(l, 'el renglón con basura adelante tiene que leerse igual');
+    assert.equal(l.amountMinor, 100_000);
+    assert.equal(l.kind, 'interes');
+  });
+});
+
 describe('encabezado', () => {
-  it('saca tarjeta, cierre, vencimiento y saldos', () => {
+  it('lee el encabezado, que el banco imprime como tabla de dos filas', () => {
+    // Los rótulos van en una fila y los valores en la siguiente, alineados por
+    // columna. Buscar el valor "pegado" a su rótulo no funciona: en el texto
+    // extraído quedan todos los rótulos juntos y después todos los valores.
     assert.equal(r.card, 'Visa Signature');
     assert.equal(r.closeDate, '2026-08-27');
     assert.equal(r.dueDate, '2026-09-07');

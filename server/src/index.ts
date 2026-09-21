@@ -10,6 +10,7 @@ import { startRateScheduler } from './fx/rates.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { authRoutes } from './routes/auth.js';
 import { dataRoutes } from './routes/data.js';
+import { importRoutes } from './routes/import.js';
 import { recurringRoutes } from './routes/recurring.js';
 import { transactionRoutes } from './routes/transactions.js';
 
@@ -39,6 +40,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/transactions', transactionRoutes);
 app.route('/api/recurring', recurringRoutes);
 app.route('/api/analytics', analyticsRoutes);
+app.route('/api/import', importRoutes);
 app.route('/api', dataRoutes);
 
 app.onError((err, c) => {

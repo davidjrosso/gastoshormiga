@@ -50,6 +50,49 @@ function importes(texto: string): string[] {
   return out;
 }
 
+/**
+ * Encabezado del resumen.
+ *
+ * El banco lo imprime como una tabla de dos filas: los rótulos en una y los
+ * valores en la siguiente, alineados por columna. Leerlo buscando el valor
+ * "pegado" a cada rótulo no funciona, porque en el texto extraído los rótulos
+ * quedan todos juntos y después todos los valores.
+ *
+ * Se resuelve por posición: se ordenan los rótulos por dónde aparecen en su
+ * fila y se consumen los valores en ese mismo orden, tomando fechas para los
+ * rótulos de fecha e importes para los de importe. Así, si algún día el banco
+ * reordena las columnas, sigue funcionando.
+ */
+function encabezado(lineas: string[]) {
+  const i = lineas.findIndex((l) => /CIERRE ACTUAL/i.test(l));
+  if (i < 0) return null;
+
+  type Rotulo = { pos: number; clave: string; tipo: 'fecha' | 'monto' };
+  const rotulos: Rotulo[] = ([
+    { clave: 'cierre', tipo: 'fecha', pos: lineas[i].search(/CIERRE ACTUAL/i) },
+    { clave: 'vencimiento', tipo: 'fecha', pos: lineas[i].search(/VENCIMIENTO ACTUAL/i) },
+    { clave: 'saldoArs', tipo: 'monto', pos: lineas[i].search(/SALDO ACTUAL \$/i) },
+    { clave: 'saldoUsd', tipo: 'monto', pos: lineas[i].search(/SALDO ACTUAL U\$S/i) },
+    { clave: 'minimo', tipo: 'monto', pos: lineas[i].search(/PAGO M[IÍ]NIMO/i) },
+  ] as Rotulo[]).filter((r) => r.pos >= 0).sort((a, b) => a.pos - b.pos);
+
+  // La fila de valores es la siguiente que traiga fechas e importes.
+  for (let j = i + 1; j < Math.min(i + 5, lineas.length); j++) {
+    const fechas = (lineas[j].match(/\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2}/g) ?? []);
+    const montos = importes(lineas[j]);
+    if (fechas.length === 0 && montos.length === 0) continue;
+
+    const out: Record<string, string> = {};
+    let f = 0, m = 0;
+    for (const r of rotulos) {
+      if (r.tipo === 'fecha' && f < fechas.length) out[r.clave] = fechas[f++];
+      else if (r.tipo === 'monto' && m < montos.length) out[r.clave] = montos[m++];
+    }
+    if (out.cierre) return out;
+  }
+  return null;
+}
+
 const CAB_PAGOS = /Sus pagos y ajustes realizados/i;
 const CAB_CONSUMOS = /^Consumos\s+(.+?)\s*$/i;
 const CAB_TOTAL = /^TOTAL CONSUMOS DE\s+(.+?)\s+(-?[\d.]*\d,\d{2})\s+(-?[\d.]*\d,\d{2})\s*$/i;
@@ -138,8 +181,9 @@ export function parseBbvaVisa(texto: string): ParsedStatement {
   const card = uno(/\n(Visa [A-Za-zÁ-úñÑ]+)\s+cuenta/) ?? 'Visa';
   const cuenta = uno(/cuenta\s+(\d{6,})/);
 
-  const cierre = parseFecha(uno(/CIERRE ACTUAL\s*(\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2})/) ?? '') ?? '';
-  const vto = parseFecha(uno(/VENCIMIENTO ACTUAL\s*(\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2})/) ?? '') ?? '';
+  const cab = encabezado(lineas.map((l) => l.trim()));
+  const cierre = parseFecha(cab?.cierre ?? '') ?? '';
+  const vto = parseFecha(cab?.vencimiento ?? '') ?? '';
   const mAnterior = /SALDO ANTERIOR\s+(-?[\d.]*\d,\d{2})\s+(-?[\d.]*\d,\d{2})/.exec(texto);
 
   const lines: StatementLine[] = [];
@@ -166,7 +210,12 @@ export function parseBbvaVisa(texto: string): ParsedStatement {
     }
     if (FIN.test(l)) { if (seccion === 'cargos') seccion = 'ninguna'; continue; }
 
-    const mFecha = /^(\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2})\s+(.*)$/.exec(l);
+    // El PDF mete glifos de su código de barras al principio de algunos
+    // renglones ("ËijjggÌ27-Ago-26 INTERESES FINANCIACION"). Anclando la fecha
+    // al comienzo, ese renglón se perdía entero y en silencio. Se recorta solo
+    // cuando lo que sigue ES una fecha, así no se come nada legítimo.
+    const limpia = l.replace(/^[^\d]{1,12}(?=\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2}\s)/, '');
+    const mFecha = /^(\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2})\s+(.*)$/.exec(limpia);
     if (!mFecha) continue;
     const fecha = parseFecha(mFecha[1]);
     if (!fecha) continue;
@@ -217,8 +266,8 @@ export function parseBbvaVisa(texto: string): ParsedStatement {
   // Un parser de PDF no falla con una excepción: falla perdiendo un renglón y
   // devolviendo un número que parece razonable. La única defensa es sumar lo
   // parseado y compararlo contra los totales que el propio resumen declara.
-  const balanceArs = minor(uno(/SALDO ACTUAL \$\s*(-?[\d.]*\d,\d{2})/));
-  const balanceUsd = minor(uno(/SALDO ACTUAL U\$S\s*(-?[\d.]*\d,\d{2})/));
+  const balanceArs = minor(cab?.saldoArs ?? null);
+  const balanceUsd = minor(cab?.saldoUsd ?? null);
   const previousArs = mAnterior ? parseAmountToMinor(mAnterior[1]) : 0;
   const previousUsd = mAnterior ? parseAmountToMinor(mAnterior[2]) : 0;
 
@@ -250,7 +299,7 @@ export function parseBbvaVisa(texto: string): ParsedStatement {
     dueDate: vto,
     balanceArsMinor: balanceArs,
     balanceUsdCents: balanceUsd,
-    minimumArsMinor: minor(uno(/PAGO MÍNIMO \$\s*(-?[\d.]*\d,\d{2})/)),
+    minimumArsMinor: minor(cab?.minimo ?? null),
     previousArsMinor: previousArs,
     previousUsdCents: previousUsd,
     holders,

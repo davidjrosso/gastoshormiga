@@ -54,6 +54,16 @@ export default defineConfig({
         // Las llamadas a la API van a red primero: datos viejos en una app de
         // plata es peor que un error honesto.
         navigateFallback: `${APP_BASE}index.html`,
+        // pdf.js queda fuera del precache a propósito.
+        //
+        // Solo lo necesita la pantalla de importar un resumen, que se usa una
+        // vez por mes. Precacheándolo, el peso de instalar la PWA subía de
+        // 611 kB a 980 kB para TODOS: se pagaría en cada instalación y en cada
+        // actualización del service worker, por una función ocasional.
+        //
+        // Se baja la primera vez que entrás a importar y de ahí en más queda
+        // en caché de runtime.
+        globIgnores: ['**/pdf*.js', '**/pdf*.mjs'],
         runtimeCaching: [
           {
             urlPattern: /\/api\/.*/,
@@ -62,6 +72,16 @@ export default defineConfig({
               cacheName: 'api',
               networkTimeoutSeconds: 5,
               expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 },
+            },
+          },
+          {
+            // pdf.js y su worker: una vez bajados, quedan. Son inmutables
+            // (el nombre lleva hash), así que CacheFirst es lo correcto.
+            urlPattern: /\/assets\/pdf.*\.(js|mjs)$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'pdfjs',
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 365 },
             },
           },
         ],

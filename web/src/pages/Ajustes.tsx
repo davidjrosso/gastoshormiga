@@ -63,6 +63,17 @@ export default function Ajustes() {
         <span className="text-xl text-ink-mute">›</span>
       </Link>
 
+      {/* Vive en Ajustes y no en la barra de abajo a propósito: importar un
+          resumen se hace una vez al mes, y la navegación principal es para lo
+          que se usa todos los días. */}
+      <Link to="/importar" className="card flex items-center justify-between">
+        <div>
+          <p className="label">Importar resumen</p>
+          <p className="mt-1 text-sm">Cargar el PDF de la tarjeta de una vez</p>
+        </div>
+        <span className="text-xl text-ink-mute">›</span>
+      </Link>
+
       <div className="card">
         <p className="label">Código de invitación</p>
         <p className="mt-1 break-all rounded-xl bg-slate-100 px-3 py-2 font-mono text-xs dark:bg-slate-800">

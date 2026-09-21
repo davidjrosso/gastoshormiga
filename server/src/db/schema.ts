@@ -140,6 +140,26 @@ export const transactions = sqliteTable('transactions', {
 
   recurringRuleId: text('recurring_rule_id'),
 
+  // --- Importación de resúmenes de tarjeta ---------------------------------
+  /** Quién de la tarjeta hizo el consumo (titular o adicional). Distinto de
+   *  `paidByUserId`: ése es un integrante del hogar, éste puede ser cualquiera
+   *  a quien haya que cobrarle. */
+  cardHolderId: text('card_holder_id'),
+  /** Cuota n de N. Una cuota NO es una compra nueva: sin esto el detector de
+   *  hormiga ve seis compras repetidas del mismo comercio y marca un goteo
+   *  que no existe. */
+  installmentN: integer('installment_n'),
+  installmentOf: integer('installment_of'),
+  statementImportId: text('statement_import_id'),
+  /** Huella del renglón del resumen. UNIQUE por hogar: es lo que hace que
+   *  reimportar el mismo PDF no duplique nada, garantizado por la base y no
+   *  solo por el código. */
+  importFingerprint: text('import_fingerprint'),
+  /** Moneda y monto originales de una compra en el exterior que no era USD.
+   *  Sin esto no se puede auditar a qué cambio te la liquidaron. */
+  originalCurrency: text('original_currency'),
+  originalAmountMinor: integer('original_amount_minor'),
+
   // Cotización congelada al momento del movimiento (centavos ARS por 1 USD).
   usdRateMinor: integer('usd_rate_minor'),
 
@@ -148,6 +168,7 @@ export const transactions = sqliteTable('transactions', {
 }, (t) => ({
   householdDateIdx: index('tx_household_date_idx').on(t.householdId, t.date),
   merchantIdx: index('tx_merchant_idx').on(t.merchantId),
+  cardHolderIdx: index('tx_card_holder_idx').on(t.cardHolderId),
   categoryIdx: index('tx_category_idx').on(t.categoryId),
   accountIdx: index('tx_account_idx').on(t.accountId),
 }));
@@ -212,6 +233,50 @@ export const holdings = sqliteTable('holdings', {
   householdIdx: index('holdings_household_idx').on(t.householdId),
 }));
 
+/**
+ * Titulares de una tarjeta: el titular y sus adicionales.
+ *
+ * No son usuarios de la app y no tienen por qué serlo: son las personas que
+ * figuran en el resumen y a las que después hay que cobrarles. Cuando alguno
+ * SÍ es integrante del hogar se enlaza con `userId`, y entonces sus consumos
+ * entran también a "Quién pagó qué".
+ */
+export const cardHolders = sqliteTable('card_holders', {
+  id: id(),
+  householdId: text('household_id').notNull().references(() => households.id),
+  accountId: text('account_id').notNull().references(() => accounts.id),
+  name: text('name').notNull(),
+  normalizedName: text('normalized_name').notNull(),
+  userId: text('user_id'),
+  isTitular: integer('is_titular', { mode: 'boolean' }).notNull().default(false),
+  createdAt: now(),
+}, (t) => ({
+  acctNameIdx: uniqueIndex('card_holders_acct_name_idx').on(t.accountId, t.normalizedName),
+  householdIdx: index('card_holders_household_idx').on(t.householdId),
+}));
+
+/**
+ * Cada resumen importado. Guarda los totales que declaraba el PDF para poder
+ * auditar después si lo que quedó en la base coincide con lo que decía el banco.
+ */
+export const statementImports = sqliteTable('statement_imports', {
+  id: id(),
+  householdId: text('household_id').notNull().references(() => households.id),
+  accountId: text('account_id').notNull().references(() => accounts.id),
+  bank: text('bank').notNull(),
+  card: text('card'),
+  closeDate: text('close_date').notNull(),
+  dueDate: text('due_date'),
+  balanceMinor: integer('balance_minor'),
+  balanceUsd: integer('balance_usd'),
+  linesTotal: integer('lines_total').notNull().default(0),
+  linesImported: integer('lines_imported').notNull().default(0),
+  createdByUserId: text('created_by_user_id'),
+  createdAt: now(),
+}, (t) => ({
+  householdIdx: index('statement_imports_household_idx').on(t.householdId, t.closeDate),
+}));
+
 export type Household = typeof households.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Account = typeof accounts.$inferSelect;
@@ -220,3 +285,5 @@ export type Merchant = typeof merchants.$inferSelect;
 export type Transaction = typeof transactions.$inferSelect;
 export type RecurringRule = typeof recurringRules.$inferSelect;
 export type FxRate = typeof fxRates.$inferSelect;
+export type CardHolder = typeof cardHolders.$inferSelect;
+export type StatementImport = typeof statementImports.$inferSelect;

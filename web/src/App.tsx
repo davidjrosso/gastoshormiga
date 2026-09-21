@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { ApiError, api, type Me } from './lib/api';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -8,8 +8,13 @@ import Hormiga from './pages/Hormiga';
 import Ahorros from './pages/Ahorros';
 import Fijos from './pages/Fijos';
 import Ajustes from './pages/Ajustes';
+import Importar from './pages/Importar';
 import Categorias from './pages/Categorias';
 import QuickAdd from './components/QuickAdd';
+
+/** Pantallas con su propia barra de acción abajo, donde el botón flotante
+ *  de carga rápida estorba en vez de ayudar. */
+const SIN_CARGA_RAPIDA = ['/importar'];
 
 interface AuthState {
   me: Me | null;
@@ -30,6 +35,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const location = useLocation();
   const [refreshToken, setRefreshToken] = useState(0);
 
   const reload = useCallback(async () => {
@@ -95,18 +101,25 @@ export default function App() {
             {/* Fuera de la barra inferior a propósito: se configura una vez
                 cada tanto, no es una pantalla de uso diario. */}
             <Route path="/categorias" element={<Categorias />} />
+            <Route path="/importar" element={<Importar />} />
           </Routes>
         </div>
 
-        <button
-          onClick={() => setAddOpen(true)}
-          aria-label="Cargar gasto"
-          className="fixed bottom-20 right-4 z-30 h-14 w-14 rounded-full bg-ant text-3xl
-                     leading-none text-white shadow-lg transition active:scale-95
-                     sm:right-[max(1rem,calc(50%-19rem))]"
-        >
-          +
-        </button>
+        {/* El botón de carga rápida se esconde donde hay una barra de acción
+            propia: ahí se superpone con el botón que el usuario tiene que
+            tocar, y encima ofrece cargar un gasto a mano justo cuando está
+            importando ochenta de una. */}
+        {!SIN_CARGA_RAPIDA.includes(location.pathname) && (
+          <button
+            onClick={() => setAddOpen(true)}
+            aria-label="Cargar gasto"
+            className="fixed bottom-20 right-4 z-30 h-14 w-14 rounded-full bg-ant text-3xl
+                       leading-none text-white shadow-lg transition active:scale-95
+                       sm:right-[max(1rem,calc(50%-19rem))]"
+          >
+            +
+          </button>
+        )}
 
         <BottomNav />
 

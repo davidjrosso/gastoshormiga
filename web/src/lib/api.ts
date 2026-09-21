@@ -214,6 +214,69 @@ export interface RecurringRule {
   paidByUserId: string | null;
 }
 
+// --- Importación de resúmenes ---------------------------------------------
+
+export interface StatementLine {
+  kind: string;
+  holder: string | null;
+  date: string;
+  description: string;
+  coupon: string | null;
+  amountMinor: number;
+  currency: 'ARS' | 'USD';
+  installment: { n: number; of: number } | null;
+  original: { code: string; amount: number } | null;
+}
+
+export interface PlannedMovement {
+  fingerprint: string;
+  status: 'nuevo' | 'ya_importado' | 'ignorado';
+  reason: string | null;
+  line: StatementLine;
+  movement: {
+    type: 'gasto' | 'ingreso' | 'transferencia';
+    date: string;
+    amountMinor: number;
+    currency: 'ARS' | 'USD';
+    categoryId: string | null;
+    merchantName: string | null;
+    holder: string | null;
+    note: string;
+  } | null;
+}
+
+export interface ImportPlan {
+  statement: {
+    bank: string;
+    card: string;
+    accountTail: string | null;
+    closeDate: string;
+    dueDate: string;
+    balanceArsMinor: number;
+    balanceUsdCents: number;
+    holders: Array<{ holder: string; statedArsMinor: number; statedUsdCents: number }>;
+    check: { ok: boolean; diffArsMinor: number; diffUsdCents: number };
+  };
+  movements: PlannedMovement[];
+  summary: {
+    nuevos: number;
+    yaImportados: number;
+    ignorados: number;
+    gastoNuevoMinor: number;
+    gastoNuevoUsdCents: number;
+    percepcionRecuperableMinor: number;
+  };
+}
+
+export interface ImportBody {
+  bank: string;
+  text: string;
+  accountId: string;
+  paymentAccountId?: string | null;
+  advanceAccountId?: string | null;
+  only?: string[];
+}
+
 // --- Endpoints -------------------------------------------------------------
 
 export const api = {
@@ -272,6 +335,11 @@ export const api = {
   updateTransaction: (id: string, data: TransactionEdit) =>
     patch<Transaction>(`/transactions/${id}`, data),
   deleteTransaction: (id: string) => del<{ ok: true }>(`/transactions/${id}`),
+
+  importPreview: (data: ImportBody) => post<ImportPlan>('/import/preview', data),
+  importConfirm: (data: ImportBody) =>
+    post<{ importados: number; cierre: string; resumen: ImportPlan['summary'] }>('/import/confirm', data),
+  imports: () => get<Array<{ id: string; card: string; closeDate: string; linesImported: number }>>('/import'),
 
   recurring: () => get<RecurringRule[]>('/recurring'),
   createRecurring: (data: {
