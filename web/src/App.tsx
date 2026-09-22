@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
+import { CreditCard } from 'lucide-react';
 import { ApiError, api, type Me } from './lib/api';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -10,6 +11,7 @@ import Fijos from './pages/Fijos';
 import Ajustes from './pages/Ajustes';
 import Categorias from './pages/Categorias';
 import QuickAdd from './components/QuickAdd';
+import Tarjetas from './pages/Tarjetas';
 
 interface AuthState {
   me: Me | null;
@@ -27,6 +29,7 @@ const RefreshContext = createContext<{ token: number; bump: () => void }>({
 export const useRefresh = () => useContext(RefreshContext);
 
 export default function App() {
+  const onStatements = useLocation().pathname === '/tarjetas';
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
@@ -71,10 +74,10 @@ export default function App() {
       <RefreshContext.Provider
         value={{ token: refreshToken, bump: () => setRefreshToken((t) => t + 1) }}
       >
-        <div className="mx-auto min-h-screen max-w-2xl pb-24">
+        <div className={`mx-auto min-h-screen pb-24 ${onStatements ? 'max-w-[1440px]' : 'max-w-2xl'}`}>
           <div className="flex items-center justify-between px-4 pt-3">
             <span className="text-sm font-semibold text-ink-mute dark:text-slate-400">
-              {me.household.name}
+              {me.household.name} <small className="ml-2 font-normal">v{import.meta.env.VITE_APP_VERSION}</small>
             </span>
             <NavLink
               to="/ajustes"
@@ -95,10 +98,11 @@ export default function App() {
             {/* Fuera de la barra inferior a propósito: se configura una vez
                 cada tanto, no es una pantalla de uso diario. */}
             <Route path="/categorias" element={<Categorias />} />
+            <Route path="/tarjetas" element={<Tarjetas />} />
           </Routes>
         </div>
 
-        <button
+        {!onStatements && <button
           onClick={() => setAddOpen(true)}
           aria-label="Cargar gasto"
           className="fixed bottom-20 right-4 z-30 h-14 w-14 rounded-full bg-ant text-3xl
@@ -106,7 +110,7 @@ export default function App() {
                      sm:right-[max(1rem,calc(50%-19rem))]"
         >
           +
-        </button>
+        </button>}
 
         <BottomNav />
 
@@ -127,6 +131,7 @@ const NAV = [
   { to: '/hormiga', label: 'Hormiga', icon: '🐜' },
   { to: '/ahorros', label: 'Ahorros', icon: '$' },
   { to: '/fijos', label: 'Fijos', icon: '↻' },
+  { to: '/tarjetas', label: 'Tarjetas', icon: 'card' },
 ];
 
 function BottomNav() {
@@ -150,7 +155,7 @@ function BottomNav() {
               }`
             }
           >
-            <span className="text-lg leading-none">{item.icon}</span>
+            <span className="text-lg leading-none">{item.icon === 'card' ? <CreditCard size={18}/> : item.icon}</span>
             {item.label}
           </NavLink>
         ))}

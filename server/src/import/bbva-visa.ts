@@ -32,7 +32,9 @@ export function parseFecha(s: string): string | null {
   if (!m) return null;
   const mes = MESES[m[2].toLowerCase()];
   if (!mes) return null;
-  return `20${m[3]}-${mes}-${m[1]}`;
+  const iso = `20${m[3]}-${mes}-${m[1]}`;
+  const d = new Date(`${iso}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : null;
 }
 
 /**
@@ -60,8 +62,8 @@ const RUIDO = /^(FECHA\s+DESCRIPCIÓN|Sobre \(|Banco BBVA|DETALLE$|@@@)/i;
 /** Clasifica un renglón de la sección de impuestos, cargos e intereses. */
 function clasificarCargo(desc: string): LineKind {
   const d = desc.toUpperCase();
-  // La RG 5617 va primero: es la única que vuelve, y confundirla con un
-  // impuesto común es el error que hace que el mes figure peor de lo que fue.
+  // La percepcion se separa de los impuestos generales. Su recuperacion
+  // debe verificarse; el parser no presupone una devolucion.
   if (/RG\s*5617/.test(d)) return d.startsWith('CR') ? 'credito_percepcion' : 'percepcion_recuperable';
   if (/INTERES/.test(d)) return 'interes';
   if (/ADELANTO/.test(d)) return 'adelanto';
@@ -127,7 +129,11 @@ function parseConsumo(fecha: string, resto: string, holder: string): StatementLi
 }
 
 export function parseBbvaVisa(texto: string): ParsedStatement {
+  // PDF extractors may preserve the five-column header instead of stacking cells.
+  texto = texto.replace(/CIERRE ACTUAL[^\n]*VENCIMIENTO ACTUAL[^\n]*SALDO ACTUAL[^\n]*\n\s*(\d{2}-[A-Za-z]{3}-\d{2})\s+(\d{2}-[A-Za-z]{3}-\d{2})\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})\s+(-?[\d.]+,\d{2})/,
+    (_, close, due, ars, usd, minimum) => `CIERRE ACTUAL\n${close}\nVENCIMIENTO ACTUAL\n${due}\nSALDO ACTUAL $\n${ars}\nSALDO ACTUAL U$S\n${usd}\nPAGO MÍNIMO $\n${minimum}`);
   const lineas = texto.split('\n').map((l) => l.replace(/\s+$/, ''));
+  const warnings: string[] = [];
 
   const uno = (re: RegExp): string | null => {
     const m = re.exec(texto);
@@ -166,21 +172,24 @@ export function parseBbvaVisa(texto: string): ParsedStatement {
     }
     if (FIN.test(l)) { if (seccion === 'cargos') seccion = 'ninguna'; continue; }
 
-    const mFecha = /^(\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2})\s+(.*)$/.exec(l);
-    if (!mFecha) continue;
+    const mFecha = /^[^\d]*?(\d{2}-[A-Za-zÁ-úñÑ]{3}-\d{2})\s+(.*)$/.exec(l);
+    if (!mFecha) {
+      if (seccion !== 'ninguna' && /^\d{1,2}[-/]/.test(l)) warnings.push(`Renglon sin reconocer: ${l.slice(0,200)}`);
+      continue;
+    }
     const fecha = parseFecha(mFecha[1]);
-    if (!fecha) continue;
+    if (!fecha) { warnings.push(`Fecha invalida: ${mFecha[1]}`); continue; }
     const resto = mFecha[2];
 
     if (seccion === 'consumos') {
       const c = parseConsumo(fecha, resto, holderActual);
-      if (c) lines.push(c);
+      if (c) lines.push(c); else warnings.push(`Consumo sin reconocer: ${l.slice(0,200)}`);
       continue;
     }
 
     if (seccion === 'pagos' || seccion === 'cargos') {
       const nums = importes(resto);
-      if (nums.length === 0) continue;
+      if (nums.length === 0) { warnings.push(`Cargo sin importe: ${l.slice(0,200)}`); continue; }
       // El último importe es el cargo. Si hay otro antes, es la base
       // imponible: así viene "DB IVA $ 21%  72.377,45  15.199,26", donde el
       // primero es la base y el segundo el impuesto. Tomar el primero sería
@@ -243,6 +252,7 @@ export function parseBbvaVisa(texto: string): ParsedStatement {
   const diffUsd = computedUsd - balanceUsd;
 
   return {
+    warnings,
     bank: 'bbva',
     card,
     accountTail: cuenta ? cuenta.slice(-4) : null,
@@ -256,7 +266,10 @@ export function parseBbvaVisa(texto: string): ParsedStatement {
     holders,
     lines,
     check: {
-      ok: diffArs === 0 && diffUsd === 0 && byHolder.every((h) => h.diffArsMinor === 0 && h.diffUsdCents === 0),
+      ok: Boolean(cierre && vto && mAnterior && /BBVA/i.test(texto)
+        && /SALDO ACTUAL \$\s*-?[\d.]*\d,\d{2}/.test(texto)
+        && /SALDO ACTUAL U\$S\s*-?[\d.]*\d,\d{2}/.test(texto))
+        && warnings.length === 0 && diffArs === 0 && diffUsd === 0 && byHolder.every((h) => h.diffArsMinor === 0 && h.diffUsdCents === 0),
       computedArsMinor: computedArs,
       computedUsdCents: computedUsd,
       diffArsMinor: diffArs,

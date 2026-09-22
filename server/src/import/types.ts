@@ -13,12 +13,12 @@ export type LineKind =
   | 'pago'
   /** Una compra. Esto sí es gasto. */
   | 'consumo'
-  /** Percepción que te devuelven si pagás el saldo en USD (RG 5617 30%).
-   *  No es gasto: es plata tuya en manos de ARCA por 30 días. */
+  /** Percepcion RG 5617: la exclusion/devolucion requiere verificar el pago.
+   *  No se presume su recuperacion ni un plazo fijo. */
   | 'percepcion_recuperable'
   /** La devolución de esa percepción, en el resumen siguiente. */
   | 'credito_percepcion'
-  /** Impuesto o percepción que NO vuelve (IVA RG 4240, IIBB, sellos). Gasto. */
+  /** Impuesto o percepcion (IVA RG 4240, IIBB, sellos), sujeto a revision. */
   | 'impuesto'
   /** Intereses de financiación o de adelanto. Gasto. */
   | 'interes'
@@ -58,6 +58,7 @@ export interface HolderTotal {
 }
 
 export interface ParsedStatement {
+  warnings: string[];
   bank: string;
   card: string;
   /** Últimos dígitos de la cuenta. Nunca guardamos el número completo. */

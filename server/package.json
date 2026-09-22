@@ -1,8 +1,9 @@
 {
   "name": "hormiga-server",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
@@ -13,10 +14,14 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@napi-rs/canvas": "^1.0.9",
+    "@tesseract.js-data/spa": "^1.0.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.36.4",
     "hono": "^4.6.13",
+    "pdfjs-dist": "^6.3.289",
+    "tesseract.js": "^7.0.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@
 # Pensada para convivir con otras apps en el mismo VPS: no necesita base de
 # datos externa, así que no hay un Postgres comiendo RAM al lado.
 
-FROM node:20-bookworm-slim AS build
+FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
 # better-sqlite3 es un módulo nativo. Suele haber binario precompilado, pero
@@ -16,6 +16,8 @@ COPY web/package*.json web/
 RUN cd web && npm ci
 
 COPY web/ web/
+COPY server/src/statements/model.ts server/src/statements/model.ts
+COPY server/src/import/types.ts server/src/import/types.ts
 RUN cd web && node scripts/make-icons.mjs && npm run build
 
 COPY server/package*.json server/
@@ -30,7 +32,7 @@ RUN cd server && npm run build
 RUN cd server && npm prune --omit=dev
 
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
 COPY --from=build /app/server/node_modules ./server/node_modules

@@ -27,3 +27,8 @@ dev-dist/
 # Datos concretos del despliegue (IP, usuario, rutas). El repo es publico.
 DEPLOY.local.md
 *.local.md
+
+# Local validation outputs and private statement documents.
+validation-build/
+*.pdf
+*.traineddata*

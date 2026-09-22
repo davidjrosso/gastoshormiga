@@ -151,11 +151,49 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE recurring_rules ADD COLUMN paid_by_user_id TEXT;
   `,
+  // v3 - independent statement ledger; existing transactions are untouched.
+  `
+  CREATE TABLE card_statements (
+    id TEXT PRIMARY KEY,
+    household_id TEXT NOT NULL REFERENCES households(id),
+    source_hash TEXT NOT NULL,
+    source_name TEXT NOT NULL,
+    account_id TEXT REFERENCES accounts(id),
+    close_date TEXT,
+    status TEXT NOT NULL CHECK(status IN ('draft','confirmed')),
+    revision INTEGER NOT NULL DEFAULT 1,
+    document_json TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(household_id, source_hash)
+  );
+  CREATE UNIQUE INDEX card_statement_period ON card_statements(household_id, account_id, close_date)
+    WHERE status = 'confirmed';
+  CREATE TABLE card_settlements (
+    id TEXT PRIMARY KEY,
+    statement_id TEXT NOT NULL REFERENCES card_statements(id),
+    holder TEXT NOT NULL,
+    currency TEXT NOT NULL CHECK(currency IN ('ARS','USD')),
+    amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
+    kind TEXT NOT NULL CHECK(kind IN ('payment','assumed')),
+    date TEXT NOT NULL,
+    note TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX card_settlements_statement ON card_settlements(statement_id);
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {
   const current = db.pragma('user_version', { simple: true }) as number;
   const target = MIGRATIONS.length;
+
+  // Two development branches used v3 for different features. Refuse an
+  // incompatible schema instead of accepting user_version alone.
+  if (current >= 3 && (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='card_statements'").get()
+    || !db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='card_settlements'").get())) {
+    throw new Error('Esquema de tarjeta incompatible: esta base pertenece a otra rama. No intercambiar versiones sin una migracion explicita.');
+  }
 
   if (current > target) {
     throw new Error(

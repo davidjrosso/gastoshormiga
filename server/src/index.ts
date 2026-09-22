@@ -12,9 +12,11 @@ import { authRoutes } from './routes/auth.js';
 import { dataRoutes } from './routes/data.js';
 import { recurringRoutes } from './routes/recurring.js';
 import { transactionRoutes } from './routes/transactions.js';
+import { statementRoutes } from './routes/statements.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const isProd = process.env.NODE_ENV === 'production';
+const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
 
 const app = new Hono<AppEnv>();
 
@@ -32,11 +34,12 @@ if (!isProd) {
 }
 
 app.get('/api/health', (c) =>
-  c.json({ ok: true, db: DB_PATH, env: isProd ? 'production' : 'development' }),
+  c.json({ ok: true, version, env: isProd ? 'production' : 'development' }),
 );
 
 app.route('/api/auth', authRoutes);
 app.route('/api/transactions', transactionRoutes);
+app.route('/api/statements', statementRoutes);
 app.route('/api/recurring', recurringRoutes);
 app.route('/api/analytics', analyticsRoutes);
 app.route('/api', dataRoutes);

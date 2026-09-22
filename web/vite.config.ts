@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
 
 /**
  * Dónde vive la app dentro del dominio.
@@ -24,6 +25,7 @@ const APP_BASE = (() => {
 })();
 
 export default defineConfig({
+  define: { 'import.meta.env.VITE_APP_VERSION': JSON.stringify(JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version) },
   base: APP_BASE,
   plugins: [
     react(),
@@ -55,6 +57,7 @@ export default defineConfig({
         // plata es peor que un error honesto.
         navigateFallback: `${APP_BASE}index.html`,
         runtimeCaching: [
+          { urlPattern: /\/api\/statements(?:\/|$)/, handler: 'NetworkOnly' },
           {
             urlPattern: /\/api\/.*/,
             handler: 'NetworkFirst',
@@ -72,7 +75,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: process.env.API_TARGET ?? 'http://localhost:3001',
         changeOrigin: true,
       },
     },
