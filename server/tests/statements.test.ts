@@ -19,8 +19,10 @@ import {
   getStatement,
   addSettlement,
   removeSettlement,
+  configureMovements,
 } from '../src/statements/repository.js';
 import { statementRoutes } from '../src/routes/statements.js';
+import { transactionRoutes } from '../src/routes/transactions.js';
 
 const source = readFileSync(new URL('./fixtures/bbva-visa.txt', import.meta.url), 'utf8');
 function fixture() {
@@ -41,6 +43,112 @@ function ready() {
   f.doc.reviewConfirmed = true;
   return f;
 }
+test('mapped holders post exactly once with correct user, currency and closing date', async () => {
+  const f = ready();
+  const mapping = f.doc.holders.map((h, i) => ({ holder: h.holder, userId: i === 0 ? f.userId : f.otherUserId }));
+  assert.equal(configureMovements(f.householdId, f.record.id, mapping, f.userId).deferred, true);
+  const rows = () => sqlite.prepare('SELECT * FROM transactions WHERE household_id=?').all(f.householdId) as {id:string;paid_by_user_id:string;date:string;currency:string;amount_minor:number}[];
+  assert.equal(rows().length, 0);
+  saveStatement(f.householdId, f.record.id, 1, f.doc, true);
+  const expected = f.doc.lines.filter(l => l.treatment === 'allocate' && ['consumo','impuesto','interes','percepcion_recuperable'].includes(l.kind))
+    .flatMap(l => l.allocations.filter(a => a.amountMinor !== 0).map(a => ({
+      user: mapping.find(m => m.holder === a.holder)!.userId, amount: a.amountMinor, currency:l.currency,
+    })));
+  assert.equal(rows().length, expected.length);
+  assert.deepEqual(rows().map(r => ({user:r.paid_by_user_id,amount:r.amount_minor,currency:r.currency})), expected);
+  assert.ok(rows().every(r => r.date === f.doc.closeDate));
+  assert.equal(configureMovements(f.householdId, f.record.id, mapping, f.userId).created, 0);
+  const app = new Hono().route('/api/transactions', transactionRoutes);
+  const headers = {cookie:`hormiga_session=${makeSession(f.userId)}`, 'Content-Type':'application/json'};
+  const filtered = await (await app.request(`/api/transactions?period=${f.doc.closeDate.slice(0,7)}&paidBy=${f.otherUserId}`, {headers})).json() as {paidByUserId:string;statementId:string}[];
+  assert.ok(filtered.length > 0 && filtered.every(r => r.paidByUserId === f.otherUserId && r.statementId === f.record.id));
+  assert.equal((await app.request(`/api/transactions/${rows()[0].id}`, {method:'PATCH', headers,body:JSON.stringify({amount:'1,00'})})).status,409);
+  assert.equal((await app.request(`/api/transactions/${rows()[0].id}`, {method:'DELETE',headers})).status,409);
+  assert.equal((await app.request(`/api/transactions/${rows()[0].id}`, {method:'PATCH',headers,body:JSON.stringify({categoryId:f.categoryId})})).status,200);
+  assert.equal(configureMovements(f.householdId, f.record.id, mapping, f.userId).created, 0);
+});
+
+test('existing confirmed statements can be incorporated; external holders stay outside household expenses', () => {
+  const f = ready();
+  saveStatement(f.householdId, f.record.id, 1, f.doc, true);
+  const mapping = f.doc.holders.map((h, i) => ({holder:h.holder,userId:i === 0 ? f.userId : null}));
+  const result = configureMovements(f.householdId, f.record.id, mapping, f.userId);
+  assert.ok(result.created > 0);
+  const rows = sqlite.prepare('SELECT paid_by_user_id,amount_minor FROM transactions WHERE household_id=?').all(f.householdId) as {paid_by_user_id:string}[];
+  assert.ok(rows.every(r => r.paid_by_user_id === f.userId));
+  assert.throws(() => configureMovements(f.householdId, f.record.id, mapping.map(m => ({...m,userId:null})), f.userId), /vinculados/);
+  assert.equal(configureMovements(f.householdId, f.record.id, mapping, f.userId).created,0);
+});
+
+test('invalid ownership and possible manual duplicates roll back the entire posting', () => {
+  const f = ready(); const other = ready();
+  const mapping = f.doc.holders.map(h => ({holder:h.holder,userId:f.userId}));
+  assert.throws(() => configureMovements(f.householdId, f.record.id, mapping.map(m => ({...m,userId:other.userId})),f.userId), /hogar/);
+  assert.throws(() => configureMovements(other.householdId,f.record.id,mapping,other.userId), /encontrado/);
+  configureMovements(f.householdId,f.record.id,mapping,f.userId);
+  const last = f.doc.lines.filter(l => l.kind === 'consumo').at(-1)!;
+  sqlite.prepare(`INSERT INTO transactions (id, household_id,type,date,account_id,amount_minor,currency,note) VALUES (?,?,'gasto',?,?,?,?,?)`)
+    .run(randomUUID(),f.householdId,f.doc.closeDate,f.accountId,last.amountMinor,last.currency,last.description);
+  assert.throws(() => saveStatement(f.householdId,f.record.id,1,f.doc,true), /duplicado/);
+  assert.equal(getStatement(f.householdId,f.record.id).status,'draft');
+  assert.equal(getStatement(f.householdId,f.record.id).revision,1);
+  assert.equal((sqlite.prepare('SELECT count(*) n FROM transactions WHERE household_id=?').get(f.householdId) as {n:number}).n,1);
+  assert.equal((sqlite.prepare('SELECT count(*) n FROM card_movement_links WHERE statement_id=?').get(f.record.id) as {n:number}).n,0);
+});
+
+test('movement configuration API requires authentication and rejects foreign users', async () => {
+  const f=ready(), other=ready();
+  const app=new Hono().route('/api/statements',statementRoutes);
+  assert.equal((await app.request('/api/statements/movement-settings')).status,401);
+  const headers={cookie:`hormiga_session=${makeSession(f.userId)}`, 'Content-Type':'application/json'};
+  const response=await app.request('/api/statements/movement-settings',{headers});
+  assert.equal(response.status,200); assert.equal(response.headers.get('Cache-Control'),'no-store');
+  const mappings=f.doc.holders.map(h=>({holder:h.holder,userId:other.userId}));
+  assert.equal((await app.request(`/api/statements/${f.record.id}/movements`,{method:'POST',headers,body:JSON.stringify(mappings)})).status,409);
+});
+
+test('a consumption refund reduces expense without turning into income or an extra collection', () => {
+  const f=ready();
+  const original=f.doc.lines.find(l=>l.kind==='consumo' && l.currency==='ARS')!;
+  const refund={...original,id:'refund',description:'Refund QA',amountMinor:-100,allocations:[{holder:original.holder!,amountMinor:-100}]};
+  f.doc.lines.push(refund);
+  f.doc.balanceArsMinor-=100;
+  f.doc.holders.find(h=>h.holder===original.holder)!.statedArsMinor-=100;
+  configureMovements(f.householdId,f.record.id,f.doc.holders.map(h=>({holder:h.holder,userId:f.userId})),f.userId);
+  saveStatement(f.householdId,f.record.id,1,f.doc,true);
+  const tx=sqlite.prepare(`SELECT t.type,t.amount_minor FROM transactions t JOIN card_movement_links l ON t.id=l.transaction_id
+    WHERE l.statement_id=? AND l.line_id='refund'`).get(f.record.id);
+  assert.deepEqual(tx,{type:'gasto',amount_minor:-100});
+});
+
+test('future closing remembers selected users without reposting previous closing', () => {
+  const f=ready();
+  const mappings=f.doc.holders.map((h,i)=>({holder:h.holder,userId:i===0?f.userId:null}));
+  configureMovements(f.householdId,f.record.id,mappings,f.userId);
+  saveStatement(f.householdId,f.record.id,1,f.doc,true);
+  const next={...f.doc,closeDate:'2026-09-29',dueDate:'2026-10-10'};
+  const record=createDraft(f.householdId,randomUUID(),'next.pdf',next).record;
+  saveStatement(f.householdId,record.id,1,next,true);
+  const oldCount=(sqlite.prepare('SELECT count(*) n FROM card_movement_links WHERE statement_id=?').get(f.record.id) as {n:number}).n;
+  const newCount=(sqlite.prepare('SELECT count(*) n FROM card_movement_links WHERE statement_id=?').get(record.id) as {n:number}).n;
+  assert.ok(oldCount>0); assert.equal(newCount,oldCount);
+  assert.equal(configureMovements(f.householdId,record.id,mappings,f.userId).created,0);
+});
+
+test('migration v3 to v4 leaves existing confirmed documents and collections untouched', () => {
+  const db=new Database(':memory:');
+  try {
+    runMigrations(db);
+    db.exec('DROP TABLE card_movement_links; DROP TABLE card_movement_users; PRAGMA user_version=3;');
+    db.exec("INSERT INTO households(id,name) VALUES('h','Existing'); INSERT INTO card_statements VALUES('s','h','hash','s.pdf',null,'2026-08-27','confirmed',4,'{}',1,2); INSERT INTO card_settlements VALUES('p','s','Person','ARS',123,'payment','2026-09-01','Existing',1);");
+    const before=db.prepare('SELECT * FROM card_statements').all();
+    const payments=db.prepare('SELECT * FROM card_settlements').all();
+    assert.deepEqual(runMigrations(db),{from:3,to:4});
+    assert.deepEqual(db.prepare('SELECT * FROM card_statements').all(),before);
+    assert.deepEqual(db.prepare('SELECT * FROM card_settlements').all(),payments);
+  } finally {db.close();}
+});
+
 test('blank input and impossible dates are not valid statements', () => {
   assert.equal(parseBbvaVisa('').check.ok, false);
   assert.equal(parseBbvaVisa('Otro documento').check.ok, false);
@@ -73,11 +181,11 @@ test('proportional allocations preserve cents, signs and deterministic ties', ()
   );
   assert.deepEqual(proportionalAllocation(100, [{ holder: 'A', weight: 0 }]), []);
 });
-test('migration v2 to v3 preserves previous data and is repeatable', () => {
+test('migration v2 to v4 preserves previous data and is repeatable', () => {
   const db = new Database(':memory:');
   try {
     runMigrations(db);
-    db.exec('DROP TABLE card_settlements; DROP TABLE card_statements; PRAGMA user_version=2;');
+    db.exec('DROP TABLE card_movement_links; DROP TABLE card_movement_users; DROP TABLE card_settlements; DROP TABLE card_statements; PRAGMA user_version=2;');
     db.prepare('INSERT INTO households (id,name) VALUES (?,?)').run('test', 'Existing household');
     db.prepare(
       "INSERT INTO accounts (id,household_id,name,type) VALUES ('a','test','Card','tarjeta')",
@@ -86,9 +194,9 @@ test('migration v2 to v3 preserves previous data and is repeatable', () => {
       "INSERT INTO transactions (id,household_id,type,date,account_id,amount_minor) VALUES ('t','test','gasto','2026-01-02','a',12345)",
     ).run();
     const before = db.prepare('SELECT * FROM transactions').all();
-    assert.deepEqual(runMigrations(db), { from: 2, to: 3 });
+    assert.deepEqual(runMigrations(db), { from: 2, to: 4 });
     assert.deepEqual(db.prepare('SELECT * FROM transactions').all(), before);
-    assert.deepEqual(runMigrations(db), { from: 3, to: 3 });
+    assert.deepEqual(runMigrations(db), { from: 4, to: 4 });
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
   } finally {
     db.close();

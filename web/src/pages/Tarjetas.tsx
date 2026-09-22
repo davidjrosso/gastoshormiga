@@ -22,6 +22,7 @@ import {
 } from '../lib/statements';
 import { AllocationEditor, MoneyField, kindNames } from '../components/StatementFields';
 import StatementSummary from '../components/StatementSummary';
+import StatementMovements from '../components/StatementMovements';
 import '../statements.css';
 
 const dateLabel = (date: string) => (date ? date.split('-').reverse().join('/') : 'Sin cierre');
@@ -215,6 +216,7 @@ export default function Tarjetas() {
       )}
       {record && doc && summary && (
         <>
+          <StatementMovements key={record.id} record={record} />
           <form
             ref={form}
             onSubmit={(e) => {

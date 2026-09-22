@@ -1,8 +1,8 @@
-import { and, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireAuth, type AppEnv } from '../auth.js';
-import { db } from '../db/index.js';
+import { db, sqlite } from '../db/index.js';
 import { accounts, categories, merchants, transactions } from '../db/schema.js';
 import { getRateForDate, householdRateType } from '../fx/rates.js';
 import { normalizeMerchantName, parseAmountToMinor, periodRange, todayISO } from '../lib/money.js';
@@ -162,6 +162,7 @@ transactionRoutes.get('/', (c) => {
       categoryIcon: categories.icon,
       merchantName: merchants.name,
       accountName: accounts.name,
+      statementId: sql<string | null>`(SELECT statement_id FROM card_movement_links WHERE transaction_id = ${transactions.id})`,
     })
     .from(transactions)
     .leftJoin(categories, eq(categories.id, transactions.categoryId))
@@ -180,6 +181,7 @@ transactionRoutes.get('/', (c) => {
       categoryIcon: r.categoryIcon,
       merchantName: r.merchantName,
       accountName: r.accountName,
+      statementId: r.statementId,
     })),
   );
 });
@@ -215,6 +217,9 @@ transactionRoutes.patch('/:id', async (c) => {
     .limit(1)
     .all();
   if (existing.length === 0) return c.json({ error: 'No encontrado' }, 404);
+  const linked = sqlite.prepare('SELECT 1 FROM card_movement_links WHERE transaction_id = ?').get(id);
+  if (linked && (d.amount !== undefined || d.date !== undefined || d.paidByUserId !== undefined))
+    return c.json({ error: 'El importe, la fecha y la persona estan vinculados al resumen de tarjeta. Solo puedes cambiar categoria, comercio y nota.' }, 409);
 
   const updates: Record<string, unknown> = { updatedAt: new Date() };
 
@@ -258,6 +263,9 @@ transactionRoutes.patch('/:id', async (c) => {
 transactionRoutes.delete('/:id', (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
+  if (sqlite.prepare(`SELECT 1 FROM card_movement_links l JOIN transactions t ON t.id = l.transaction_id
+    WHERE t.id = ? AND t.household_id = ?`).get(id, user.householdId))
+    return c.json({ error: 'Este movimiento esta vinculado a un resumen confirmado y no se puede borrar por separado.' }, 409);
   const deleted = db
     .delete(transactions)
     .where(and(eq(transactions.id, id), eq(transactions.householdId, user.householdId)))

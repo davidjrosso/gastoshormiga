@@ -151,8 +151,8 @@ export default function Movimientos() {
                         ? 'text-ink-mute dark:text-slate-400'
                         : ''
                   }`}>
-                    {t.type === 'ingreso' ? '+' : t.type === 'gasto' ? '−' : ''}
-                    {money(t.amountMinor, t.currency as 'ARS' | 'USD', false)}
+                    {t.type === 'ingreso' ? '+' : t.type === 'gasto' ? (t.amountMinor < 0 ? '+' : '−') : ''}
+                    {money(Math.abs(t.amountMinor), t.currency as 'ARS' | 'USD', false)}
                   </p>
                   {t.type === 'transferencia' && t.amountToMinor != null
                     && t.currencyTo !== t.currency && (
@@ -165,6 +165,8 @@ export default function Movimientos() {
 
                 <button
                   onClick={() => remove(t.id)}
+                  disabled={!!t.statementId}
+                  title={t.statementId ? 'Vinculado a resumen confirmado' : 'Borrar movimiento'}
                   className="shrink-0 px-1 text-lg text-slate-300 hover:text-red-500 dark:text-slate-600"
                   aria-label="Borrar"
                 >

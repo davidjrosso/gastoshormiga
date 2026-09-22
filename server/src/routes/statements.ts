@@ -14,7 +14,9 @@ import {
   listStatements,
   removeSettlement,
   saveStatement,
+  configureMovements,
 } from '../statements/repository.js';
+import { MovementError, movementSettings } from '../statements/movements.js';
 import { documentSchema, settlementSchema } from '../statements/validation.js';
 
 export const statementRoutes = new Hono<AppEnv>();
@@ -31,6 +33,7 @@ statementRoutes.use(
   }),
 );
 statementRoutes.onError((e, c) => {
+  if (e instanceof MovementError) return c.json({ error: e.message }, 409);
   if (e instanceof LedgerError) return c.json({ error: e.message }, e.status);
   if (e instanceof z.ZodError)
     return c.json(
@@ -43,6 +46,11 @@ statementRoutes.onError((e, c) => {
   );
 });
 statementRoutes.get('/', (c) => c.json(listStatements(c.get('user').householdId)));
+statementRoutes.get('/movement-settings', (c) => c.json(movementSettings(c.get('user').householdId)));
+statementRoutes.post('/:id/movements', async (c) => {
+  const mappings = z.array(z.object({ holder: z.string().min(1).max(200), userId: z.string().min(1).nullable() })).max(100).parse(await c.req.json());
+  return c.json(configureMovements(c.get('user').householdId, c.req.param('id'), mappings, c.get('user').id));
+});
 statementRoutes.get('/:id', (c) =>
   c.json(getStatement(c.get('user').householdId, c.req.param('id'))),
 );
@@ -95,6 +103,7 @@ statementRoutes.put('/:id', async (c) => {
       body.revision,
       body.document,
       body.confirm,
+      c.get('user').id,
     ),
   );
 });

@@ -182,6 +182,22 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX card_settlements_statement ON card_settlements(statement_id);
   `,
+  // v4: explicit household membership and one movement per allocated source line.
+  `
+  CREATE TABLE card_movement_users (
+    household_id TEXT NOT NULL REFERENCES households(id),
+    holder TEXT NOT NULL,
+    user_id TEXT REFERENCES users(id),
+    PRIMARY KEY (household_id, holder)
+  );
+  CREATE TABLE card_movement_links (
+    statement_id TEXT NOT NULL REFERENCES card_statements(id),
+    line_id TEXT NOT NULL,
+    holder TEXT NOT NULL,
+    transaction_id TEXT NOT NULL UNIQUE REFERENCES transactions(id),
+    PRIMARY KEY (statement_id, line_id, holder)
+  );
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

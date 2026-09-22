@@ -78,6 +78,7 @@ export interface Category {
 }
 
 export interface Transaction {
+  statementId?: string | null;
   id: string;
   type: 'gasto' | 'ingreso' | 'transferencia';
   date: string;

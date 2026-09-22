@@ -1,4 +1,4 @@
-# Tarjetas y adicionales (v0.2.0)
+# Tarjetas y adicionales (v0.2.1)
 
 ## Alcance
 
@@ -7,11 +7,28 @@ y llevar liquidaciones por persona. Todas las personas generan un saldo a
 entregar, incluido el titular. Un pago recibido y un importe asumido por el
 titular son registros distintos, ambos parciales y reversibles.
 
-No se insertan movimientos en `transactions` ni se alteran los reportes de
-gastos existentes: el libro de liquidaciones de tarjeta es independiente.
-Esto evita contar dos veces consumos ya registrados manualmente, pagos de
-la tarjeta, adelantos y devoluciones. Una integracion con el libro de gastos
-necesita una politica explicita de conciliacion antes de implementarse.
+Las liquidaciones siguen separadas. En Movimientos del hogar se vincula cada
+titular con un usuario propio o se deja Solo liquidacion. No se adivinan nombres.
+La seleccion se recuerda por hogar para futuras confirmaciones. Un borrador
+no genera gastos. Tambien se pueden incorporar resumenes ya confirmados.
+
+Solo se incorporan consumos, impuestos, intereses y percepciones no excluidos,
+por el importe asignado al titular seleccionado. No se incorporan adelantos,
+pagos bancarios, creditos de percepcion de otros periodos ni cobros/canjes del
+libro de liquidaciones. Los reintegros de consumos conservan signo negativo
+como reduccion de gasto, no como ingresos. No hay conversion ARS/USD.
+
+La fecha contable es el cierre; la fecha original y cuota quedan en la nota.
+Asi una cuota de una compra antigua afecta al mes facturado. El usuario del
+movimiento es el del titular elegido, no quien confirma. No se asocia
+automaticamente a los demas adicionales aunque el titular asuma sus deudas.
+
+Confirmacion e incorporacion son atomicas. El vinculo resumen/renglon/persona
+es unico y repetir no duplica movimientos. Una coincidencia exacta con un gasto
+manual en tarjeta, fecha (compra/cierre), descripcion y monto bloquea todo el
+alta; requiere revision. No detecta todas las posibles cargas manuales con
+descripciones diferentes. Los movimientos vinculados permiten cambiar categoria,
+comercio y nota, pero no importe, fecha, usuario ni borrado independiente.
 
 ## Flujo
 
@@ -46,6 +63,7 @@ permanecen en sus liquidaciones originales.
 - `validation.ts`: limites y validacion de las entradas HTTP.
 - `repository.ts`: transacciones SQLite, aislamiento por hogar, duplicados,
   versiones de borradores y cancelaciones.
+- `movements.ts`: vinculacion explicita de usuarios e incorporacion idempotente.
 - `extract.ts` / `extract-worker.ts`: proceso hijo aislado con limite de
   tiempo (180 s), una extraccion simultanea por proceso y modelos OCR locales.
 - `server/src/routes/statements.ts`: rutas autenticadas y sin cache.
@@ -57,7 +75,7 @@ del archivo si se conservan en SQLite. El texto completo solo vuelve al
 navegador durante la lectura; no va al log ni a Git. La vista de texto es
 una alternativa para corregir lecturas antes de volver a analizar.
 
-## Pruebas y despliegue pendiente
+## Pruebas y despliegue
 
 Node >=22.13.0. Usar `npm ci` en server y web. Las dependencias nativas deben
 instalarse en el sistema de destino, nunca copiar node_modules de Windows
@@ -77,8 +95,9 @@ PORT permite otro puerto para la API. API_TARGET en Vite debe apuntar a ese
 puerto. APP_BASE mantiene soporte para el despliegue en subdirectorio.
 
 Antes del despliegue: backup consistente SQLite, ensayo en copia y prueba
-del OCR con Node 22 Linux. La migracion v3 agrega dos tablas; no elimina ni
-reescribe datos anteriores. El codigo viejo rechaza una DB v3: rollback
+del OCR con Node 22 Linux. La migracion v4 agrega las tablas de vinculacion;
+no incorpora gastos automaticamente al arrancar ni cambia datos previos.
+El codigo viejo rechaza una DB v4: rollback
 requiere el backup y cuidado con escrituras posteriores.
 
 Configurar en el proxy de Hormiga un limite de subida de al menos 13 MB y

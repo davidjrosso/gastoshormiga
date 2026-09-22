@@ -37,6 +37,9 @@ export interface StatementListItem {
   summary: ReturnType<typeof summarize>;
 }
 export const statements = {
+  movementSettings: () => request<{ users: { id: string; name: string }[]; mappings: { holder: string; userId: string | null }[] }>('/movement-settings'),
+  configureMovements: (id: string, mappings: { holder: string; userId: string | null }[]) =>
+    request<{ created: number; linked: number; deferred: boolean }>(`/${id}/movements`, { method: 'POST', body: JSON.stringify(mappings) }),
   list: () => request<StatementListItem[]>(''),
   get: (id: string) => request<StatementRecord>(`/${id}`),
   analyze: (file: File) => {

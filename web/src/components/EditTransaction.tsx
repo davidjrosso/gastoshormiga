@@ -104,6 +104,7 @@ export default function EditTransaction({
               : `${tx.type === 'ingreso' ? 'Ingreso' : 'Gasto'} · ${tx.accountName ?? ''}`}
           </p>
         </header>
+        {tx.statementId && <p className="mb-3 text-sm text-ink-mute">Vinculado a resumen de tarjeta</p>}
 
         <div className="card">
           <label className="label" htmlFor="edit-amount">Monto</label>
@@ -112,7 +113,7 @@ export default function EditTransaction({
             className="mt-1 w-full bg-transparent text-4xl font-bold tabular outline-none placeholder:text-slate-300 disabled:opacity-50 dark:placeholder:text-slate-700"
             inputMode="decimal"
             value={amount}
-            disabled={esTransferencia}
+            disabled={esTransferencia || !!tx.statementId}
             onChange={(e) => setAmount(e.target.value)}
           />
           {esTransferencia && (
@@ -169,6 +170,7 @@ export default function EditTransaction({
               {miembros.map((m) => (
                 <button
                   key={m.id}
+                  disabled={!!tx.statementId}
                   onClick={() => setPaidByUserId(paidByUserId === m.id ? null : m.id)}
                   className={`chip ring-1 ${
                     paidByUserId === m.id
@@ -188,6 +190,7 @@ export default function EditTransaction({
           <div>
             <label className="label" htmlFor="edit-date">Fecha</label>
             <input id="edit-date" type="date" className="input mt-1" value={date}
+                   disabled={!!tx.statementId}
                    onChange={(e) => setDate(e.target.value)} />
             {date !== tx.date && (
               <p className="mt-2 text-xs text-ink-mute dark:text-slate-400">

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sqlite } from '../db/index.js';
+import { postStatementMovements, saveMovementMapping, type MovementMapping } from './movements.js';
 import {
   holderKey,
   summarize,
@@ -89,6 +90,7 @@ export function saveStatement(
   revision: number,
   document: StatementDocument,
   confirm: boolean,
+  actor: string | null = null,
 ) {
   return sqlite
     .transaction(() => {
@@ -140,9 +142,18 @@ export function saveStatement(
           Date.now(),
           id,
         );
+      if (confirm) postStatementMovements(household, id, document, actor);
       return getStatement(household, id);
     })
     .immediate();
+}
+export function configureMovements(household: string, id: string, mappings: MovementMapping[], actor: string) {
+  return sqlite.transaction(() => {
+    const record = getStatement(household, id);
+    saveMovementMapping(household, record.document, mappings);
+    if (record.status !== 'confirmed') return { created: 0, linked: 0, deferred: true };
+    return { ...postStatementMovements(household, id, record.document, actor), deferred: false };
+  }).immediate();
 }
 export function addSettlement(household: string, id: string, entry: Settlement) {
   return sqlite
