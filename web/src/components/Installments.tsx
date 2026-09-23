@@ -18,8 +18,8 @@ export default function Installments({ period, months = 6, paidBy = '', eventId 
     return () => { active = false; };
   }, [period, months, paidBy, eventId, token, retry]);
 
-  return <section className="card" aria-label="Cuotas comprometidas">
-    <h2 className="font-semibold">Cuotas comprometidas</h2>
+  return <details className="card" aria-label="Cuotas comprometidas">
+    <summary className="cursor-pointer font-semibold">Cuotas comprometidas</summary>
     <p className="mt-1 text-xs text-ink-mute dark:text-slate-400">
       Estimadas por mes de cierre. Se muestran aparte de los gastos confirmados y conservan el importe de la última cuota.
     </p>
@@ -67,5 +67,5 @@ export default function Installments({ period, months = 6, paidBy = '', eventId 
             </details>
           </>}
       </>}
-  </section>;
+  </details>;
 }
