@@ -1,11 +1,12 @@
 import { sqlite } from '../db/index.js';
 import { shiftPeriod, todayISO } from '../lib/money.js';
 import type { StatementDocument } from '../statements/model.js';
+import { inheritedEvent } from '../events.js';
 
 /** A confirmed statement is a complete snapshot of a card's billed plans.
  * Using only its latest snapshot avoids fuzzy purchase matching and duplicate
  * forecasts. Projections never become transactions or change account balances. */
-export function installmentForecast(household: string, period: string, months = 6, paidBy?: string) {
+export function installmentForecast(household: string, period: string, months = 6, paidBy?: string, eventId?: string | null) {
   const rows = sqlite.prepare(`SELECT s.id, s.document_json, a.name AS accountName
     FROM card_statements s JOIN accounts a ON a.id = s.account_id AND a.household_id = s.household_id
     WHERE s.household_id = ? AND s.status = 'confirmed'
@@ -14,16 +15,22 @@ export function installmentForecast(household: string, period: string, months = 
       AND newer.status = 'confirmed' AND newer.close_date > s.close_date)
     ORDER BY a.name, s.id`).all(household) as { id: string; document_json: string; accountName: string }[];
   const links = sqlite.prepare(`SELECT l.statement_id, l.line_id, t.amount_minor, t.currency,
-    t.paid_by_user_id AS userId, u.display_name AS userName
+    t.paid_by_user_id AS userId, u.display_name AS userName, l.holder AS allocationHolder
     FROM card_movement_links l JOIN transactions t ON t.id = l.transaction_id
     JOIN card_statements s ON s.id = l.statement_id
     LEFT JOIN users u ON u.id = t.paid_by_user_id AND u.household_id = t.household_id
     WHERE t.household_id = ? AND s.household_id = ?`).all(household, household) as {
       statement_id: string; line_id: string; amount_minor: number; currency: 'ARS' | 'USD'; userId: string; userName: string | null;
+      allocationHolder: string;
     }[];
+  const eventNames = new Map((sqlite.prepare('SELECT id,name FROM events WHERE household_id=?').all(household) as { id: string; name: string }[]).map(e => [e.id, e.name]));
   const sources = rows.map(row => {
     const doc = JSON.parse(row.document_json) as StatementDocument;
-    return { ...row, doc, linked: links.filter(l => l.statement_id === row.id) };
+    return { ...row, doc, linked: links.filter(l => l.statement_id === row.id).map(l => {
+      const line = doc.lines.find(line => line.id === l.line_id);
+      const inherited = line ? inheritedEvent(household, doc, line, l.allocationHolder) : null;
+      return { ...l, eventId: inherited, eventName: inherited ? eventNames.get(inherited) ?? null : null };
+    }) };
   });
   // A recent completed month is an explicit reference, not a promised salary.
   const referenceBefore = period < todayISO().slice(0, 7) ? period : todayISO().slice(0, 7);
@@ -44,10 +51,11 @@ export function installmentForecast(household: string, period: string, months = 
       return source.doc.lines.flatMap(line => {
         const quota = line.installment;
         if (line.kind !== 'consumo' || line.treatment !== 'allocate' || !quota || quota.n + offset > quota.of) return [];
-        return source.linked.filter(l => l.line_id === line.id && l.amount_minor > 0 && (!paidBy || l.userId === paidBy))
+        return source.linked.filter(l => l.line_id === line.id && l.amount_minor > 0 && (!paidBy || l.userId === paidBy) && (eventId === undefined || l.eventId === eventId))
           .map(l => ({
             statementId: source.id, lineId: line.id, accountName: source.accountName,
             description: line.description, userId: l.userId, userName: l.userName,
+            eventId: l.eventId, eventName: l.eventName,
             amountMinor: l.amount_minor, currency: l.currency,
             n: quota.n + offset, of: quota.of,
             lastPeriod: shiftPeriod(closePeriod, -(quota.of - quota.n)),

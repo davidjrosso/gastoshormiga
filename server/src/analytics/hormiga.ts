@@ -1,5 +1,6 @@
 import { sqlite } from '../db/index.js';
 import { periodRange, shiftPeriod, toUsdCents } from '../lib/money.js';
+import { habitualExpenseSql } from '../events.js';
 
 /**
  * Motor de análisis.
@@ -86,8 +87,8 @@ function avgMonthlyIncomeMinor(householdId: string, startDate: string, endDate: 
 function medianExpenseMinor(householdId: string, startDate: string, endDate: string): number {
   const rows = sqlite
     .prepare(
-      `SELECT amount_minor FROM transactions
-        WHERE household_id = ? AND type = 'gasto' AND date BETWEEN ? AND ?
+      `SELECT amount_minor FROM transactions t
+        WHERE household_id = ? AND type = 'gasto' AND date BETWEEN ? AND ? AND ${habitualExpenseSql}
         ORDER BY amount_minor`,
     )
     .all(householdId, startDate, endDate) as Array<{ amount_minor: number }>;
@@ -125,6 +126,7 @@ export function detectHormiga(householdId: string, months = 3): HormigaItem[] {
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.household_id = ?
           AND t.type = 'gasto'
+          AND ${habitualExpenseSql}
           AND t.date BETWEEN ? AND ?`,
     )
     .all(householdId, startDate, endDate) as TxRow[];
@@ -233,6 +235,7 @@ export function detectSubscriptions(householdId: string, months = 6): Subscripti
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.household_id = ?
           AND t.type = 'gasto'
+          AND ${habitualExpenseSql}
           AND t.date >= ?
         ORDER BY t.date`,
     )
@@ -315,6 +318,8 @@ export function detectSubscriptions(householdId: string, months = 6): Subscripti
 }
 
 export interface MonthlySummary {
+  habitualExpenseMinor: number;
+  habitualExpenseUsdCents: number | null;
   period: string;
   incomeMinor: number;
   expenseMinor: number;
@@ -336,7 +341,7 @@ export function monthlySummary(householdId: string, period: string): MonthlySumm
 
   const rows = sqlite
     .prepare(
-      `SELECT t.type, t.amount_minor, t.currency, t.usd_rate_minor,
+      `SELECT t.type, t.amount_minor, t.currency, t.usd_rate_minor, ${habitualExpenseSql} AS habitual,
               COALESCE(c.is_fixed, 0) AS is_fixed
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
@@ -346,6 +351,7 @@ export function monthlySummary(householdId: string, period: string): MonthlySumm
     )
     .all(householdId, start, end) as Array<{
       type: string;
+      habitual: number;
       amount_minor: number;
       currency: string;
       usd_rate_minor: number | null;
@@ -359,6 +365,9 @@ export function monthlySummary(householdId: string, period: string): MonthlySumm
   let expenseUsd = 0;
   let incomeUsdKnown = false;
   let expenseUsdKnown = false;
+  let habitualExpenseMinor = 0;
+  let habitualExpenseUsd = 0;
+  let habitualUsdKnown = false;
 
   for (const r of rows) {
     const usd = toUsdCents(r.amount_minor, r.currency, r.usd_rate_minor);
@@ -369,6 +378,10 @@ export function monthlySummary(householdId: string, period: string): MonthlySumm
         incomeUsdKnown = true;
       }
     } else {
+      if (r.habitual) {
+        habitualExpenseMinor += r.amount_minor;
+        if (usd !== null) { habitualExpenseUsd += usd; habitualUsdKnown = true; }
+      }
       expenseMinor += r.amount_minor;
       if (r.is_fixed) fixedExpenseMinor += r.amount_minor;
       if (usd !== null) {
@@ -391,6 +404,8 @@ export function monthlySummary(householdId: string, period: string): MonthlySumm
       incomeMinor > 0 ? Math.round((balanceMinor / incomeMinor) * 1000) / 10 : null,
     incomeUsdCents: incomeUsdKnown ? incomeUsd : null,
     expenseUsdCents: expenseUsdKnown ? expenseUsd : null,
+    habitualExpenseMinor,
+    habitualExpenseUsdCents: habitualUsdKnown ? habitualExpenseUsd : null,
     txCount: rows.length,
   };
 }
@@ -441,6 +456,7 @@ export function spendByMember(householdId: string, period: string): MemberSpend[
 }
 
 export interface CategoryTrend {
+  habitualMinor: number;
   categoryId: string | null;
   categoryName: string;
   color: string;
@@ -471,21 +487,22 @@ export function categoryTrends(householdId: string, period: string, monthsBack =
       `SELECT t.category_id,
               COALESCE(c.name, 'Sin categoría') AS name,
               COALESCE(c.color, '#64748b')      AS color,
-              SUM(t.amount_minor)               AS total
+              SUM(t.amount_minor)               AS total,
+              SUM(CASE WHEN ${habitualExpenseSql} THEN t.amount_minor ELSE 0 END) AS habitual
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.household_id = ? AND t.type = 'gasto' AND t.date BETWEEN ? AND ?
         GROUP BY t.category_id`,
     )
     .all(householdId, start, end) as Array<{
-      category_id: string | null; name: string; color: string; total: number;
+      category_id: string | null; name: string; color: string; total: number; habitual: number;
     }>;
 
   const baseline = sqlite
     .prepare(
       `SELECT t.category_id, SUM(t.amount_minor) AS total
          FROM transactions t
-        WHERE t.household_id = ? AND t.type = 'gasto' AND t.date BETWEEN ? AND ?
+        WHERE t.household_id = ? AND t.type = 'gasto' AND t.date BETWEEN ? AND ? AND ${habitualExpenseSql}
         GROUP BY t.category_id`,
     )
     .all(householdId, baselineStart, baselineEnd) as Array<{
@@ -516,10 +533,11 @@ export function categoryTrends(householdId: string, period: string, monthsBack =
         categoryName: c.name,
         color: c.color,
         currentMinor: c.total,
+        habitualMinor: c.habitual,
         baselineMinor,
         changePct:
           baselineMinor > 0
-            ? Math.round(((c.total - baselineMinor) / baselineMinor) * 1000) / 10
+            ? Math.round(((c.habitual - baselineMinor) / baselineMinor) * 1000) / 10
             : null,
         shareOfIncomePct:
           summary.incomeMinor > 0

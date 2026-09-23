@@ -12,6 +12,7 @@ import Ajustes from './pages/Ajustes';
 import Categorias from './pages/Categorias';
 import QuickAdd from './components/QuickAdd';
 import Tarjetas from './pages/Tarjetas';
+import Eventos from './pages/Eventos';
 
 interface AuthState {
   me: Me | null;
@@ -99,6 +100,7 @@ export default function App() {
                 cada tanto, no es una pantalla de uso diario. */}
             <Route path="/categorias" element={<Categorias />} />
             <Route path="/tarjetas" element={<Tarjetas />} />
+            <Route path="/eventos" element={<Eventos />} />
           </Routes>
         </div>
 

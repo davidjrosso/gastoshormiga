@@ -20,7 +20,8 @@ analyticsRoutes.get('/installments', (c) => {
   const months = Number(c.req.query('months') ?? 6);
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period) || !Number.isInteger(months) || months < 1 || months > 24)
     return c.json({ error: 'Período o cantidad de meses inválidos.' }, 400);
-  return c.json(installmentForecast(c.get('user').householdId, period, months, c.req.query('paidBy') || undefined));
+  const eventId = c.req.query('eventId');
+  return c.json(installmentForecast(c.get('user').householdId, period, months, c.req.query('paidBy') || undefined, eventId === undefined ? undefined : eventId || null));
 });
 
 function periodParam(c: { req: { query: (k: string) => string | undefined } }): string {

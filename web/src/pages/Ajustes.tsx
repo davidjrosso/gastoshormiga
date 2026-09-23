@@ -62,6 +62,7 @@ export default function Ajustes() {
         </div>
         <span className="text-xl text-ink-mute">›</span>
       </Link>
+      <Link to="/eventos" className="card block"><p className="label">Eventos</p><p className="mt-1 text-sm">Agrupar gastos y separar los extraordinarios →</p></Link>
 
       <div className="card">
         <p className="label">Código de invitación</p>

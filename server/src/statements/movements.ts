@@ -3,6 +3,7 @@ import { sqlite } from '../db/index.js';
 import { getRateForDate, householdRateType } from '../fx/rates.js';
 import { normalizeMerchantName } from '../lib/money.js';
 import { holderKey, type StatementDocument } from './model.js';
+import { inheritedEvent, setTransactionEvent } from '../events.js';
 
 export class MovementError extends Error {}
 export type MovementMapping = { holder: string; userId: string | null };
@@ -77,6 +78,8 @@ export function postStatementMovements(household: string, statementId: string, d
       .run(id, household, date, doc.accountId, amount, line.currency, category, merchant.id, note, userId, actor,
         getRateForDate(householdRateType(household), date), Date.now(), Date.now());
     sqlite.prepare('INSERT INTO card_movement_links VALUES (?, ?, ?, ?)').run(statementId, line.id, holder, id);
+    const event = inheritedEvent(household, doc, line, holder);
+    if (event) setTransactionEvent(id, event);
     created++;
   }
   return { created, linked: existing.length + created };

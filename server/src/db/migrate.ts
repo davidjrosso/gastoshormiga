@@ -198,6 +198,29 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (statement_id, line_id, holder)
   );
   `,
+  // v5: event labels are metadata; no existing financial rows are rewritten.
+  `
+  CREATE TABLE events (
+    id TEXT PRIMARY KEY,
+    household_id TEXT NOT NULL REFERENCES households(id),
+    name TEXT NOT NULL,
+    extraordinary INTEGER NOT NULL DEFAULT 1 CHECK(extraordinary IN (0,1)),
+    archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1)),
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX events_household_idx ON events(household_id);
+  CREATE TABLE event_transactions (
+    transaction_id TEXT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    event_id TEXT NOT NULL REFERENCES events(id)
+  );
+  CREATE INDEX event_transactions_event_idx ON event_transactions(event_id);
+  CREATE TABLE card_event_rules (
+    household_id TEXT NOT NULL REFERENCES households(id),
+    purchase_key TEXT NOT NULL,
+    event_id TEXT NOT NULL REFERENCES events(id),
+    PRIMARY KEY(household_id, purchase_key)
+  );
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

@@ -56,6 +56,7 @@ export default function CategoryExpenses({ period, categoryId }: {
               {tx.accountName ? ` · ${tx.accountName}` : ''}
             </p>
             {tx.merchantName && tx.note && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-ink-mute dark:text-slate-400">{tx.note}</p>}
+            {tx.eventName && <p className="mt-1 text-xs text-ant">Evento: {tx.eventName}</p>}
           </li>
         ))}
       </ul>

@@ -135,15 +135,15 @@ test('future closing remembers selected users without reposting previous closing
   assert.equal(configureMovements(f.householdId,record.id,mappings,f.userId).created,0);
 });
 
-test('migration v3 to v4 leaves existing confirmed documents and collections untouched', () => {
+test('migration v3 to v5 leaves existing confirmed documents and collections untouched', () => {
   const db=new Database(':memory:');
   try {
     runMigrations(db);
-    db.exec('DROP TABLE card_movement_links; DROP TABLE card_movement_users; PRAGMA user_version=3;');
+    db.exec('DROP TABLE card_event_rules; DROP TABLE event_transactions; DROP TABLE events; DROP TABLE card_movement_links; DROP TABLE card_movement_users; PRAGMA user_version=3;');
     db.exec("INSERT INTO households(id,name) VALUES('h','Existing'); INSERT INTO card_statements VALUES('s','h','hash','s.pdf',null,'2026-08-27','confirmed',4,'{}',1,2); INSERT INTO card_settlements VALUES('p','s','Person','ARS',123,'payment','2026-09-01','Existing',1);");
     const before=db.prepare('SELECT * FROM card_statements').all();
     const payments=db.prepare('SELECT * FROM card_settlements').all();
-    assert.deepEqual(runMigrations(db),{from:3,to:4});
+    assert.deepEqual(runMigrations(db),{from:3,to:5});
     assert.deepEqual(db.prepare('SELECT * FROM card_statements').all(),before);
     assert.deepEqual(db.prepare('SELECT * FROM card_settlements').all(),payments);
   } finally {db.close();}
@@ -181,11 +181,11 @@ test('proportional allocations preserve cents, signs and deterministic ties', ()
   );
   assert.deepEqual(proportionalAllocation(100, [{ holder: 'A', weight: 0 }]), []);
 });
-test('migration v2 to v4 preserves previous data and is repeatable', () => {
+test('migration v2 to v5 preserves previous data and is repeatable', () => {
   const db = new Database(':memory:');
   try {
     runMigrations(db);
-    db.exec('DROP TABLE card_movement_links; DROP TABLE card_movement_users; DROP TABLE card_settlements; DROP TABLE card_statements; PRAGMA user_version=2;');
+    db.exec('DROP TABLE card_event_rules; DROP TABLE event_transactions; DROP TABLE events; DROP TABLE card_movement_links; DROP TABLE card_movement_users; DROP TABLE card_settlements; DROP TABLE card_statements; PRAGMA user_version=2;');
     db.prepare('INSERT INTO households (id,name) VALUES (?,?)').run('test', 'Existing household');
     db.prepare(
       "INSERT INTO accounts (id,household_id,name,type) VALUES ('a','test','Card','tarjeta')",
@@ -194,9 +194,9 @@ test('migration v2 to v4 preserves previous data and is repeatable', () => {
       "INSERT INTO transactions (id,household_id,type,date,account_id,amount_minor) VALUES ('t','test','gasto','2026-01-02','a',12345)",
     ).run();
     const before = db.prepare('SELECT * FROM transactions').all();
-    assert.deepEqual(runMigrations(db), { from: 2, to: 4 });
+    assert.deepEqual(runMigrations(db), { from: 2, to: 5 });
     assert.deepEqual(db.prepare('SELECT * FROM transactions').all(), before);
-    assert.deepEqual(runMigrations(db), { from: 4, to: 4 });
+    assert.deepEqual(runMigrations(db), { from: 5, to: 5 });
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
   } finally {
     db.close();

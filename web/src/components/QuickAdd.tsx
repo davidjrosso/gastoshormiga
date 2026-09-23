@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../App';
 import { ApiError, api, type Account, type Category } from '../lib/api';
 import { money, todayISO } from '../lib/format';
+import EventPicker from './EventPicker';
 
 type Kind = 'gasto' | 'ingreso' | 'transferencia';
 
@@ -19,6 +20,7 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
   const [kind, setKind] = useState<Kind>('gasto');
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [eventId, setEventId] = useState<string | null>(null);
   const [merchantName, setMerchantName] = useState('');
   const [accountId, setAccountId] = useState('');
   const [toAccountId, setToAccountId] = useState('');
@@ -93,6 +95,7 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
         date,
         accountId,
         categoryId: kind === 'transferencia' ? null : categoryId,
+        eventId: kind === 'gasto' ? eventId : null,
         merchantName: merchantName || null,
         note: note || null,
         paidByUserId: paidByUserId || null,
@@ -262,6 +265,8 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
             </p>
           </div>
         )}
+
+        {kind === 'gasto' && <div className="card mt-3"><EventPicker value={eventId} onChange={setEventId} /></div>}
 
         {showDetails ? (
           <div className="card mt-3 space-y-3">

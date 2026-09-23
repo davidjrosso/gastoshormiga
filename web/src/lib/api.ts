@@ -78,6 +78,9 @@ export interface Category {
 }
 
 export interface Transaction {
+  eventId: string | null;
+  eventName: string | null;
+  canApplyEventToPurchase: boolean;
   statementId?: string | null;
   id: string;
   type: 'gasto' | 'ingreso' | 'transferencia';
@@ -99,6 +102,8 @@ export interface Transaction {
 /** Lo que la pantalla de edición puede cambiar. El tipo y la cuenta no
  *  se tocan: ver el comentario del PATCH en el server. */
 export interface TransactionEdit {
+  eventId?: string | null;
+  eventAllInstallments?: boolean;
   amount?: string;
   date?: string;
   categoryId?: string | null;
@@ -108,6 +113,8 @@ export interface TransactionEdit {
 }
 
 export interface Summary {
+  habitualExpenseMinor: number;
+  habitualExpenseUsdCents: number | null;
   period: string;
   incomeMinor: number;
   expenseMinor: number;
@@ -121,6 +128,7 @@ export interface Summary {
 }
 
 export interface CategoryTrend {
+  habitualMinor: number;
   categoryId: string | null;
   categoryName: string;
   color: string;
@@ -208,8 +216,14 @@ export interface InstallmentForecast {
     period: string; arsMinor: number; usdCents: number; shareOfIncomePct: number | null;
     items: { statementId: string; lineId: string; accountName: string; description: string;
       userId: string; userName: string | null; amountMinor: number; currency: 'ARS' | 'USD';
+      eventId: string | null; eventName: string | null;
       n: number; of: number; lastPeriod: string }[];
   }[];
+}
+
+export interface HouseholdEvent {
+  id: string; name: string; extraordinary: boolean; archived: boolean;
+  arsMinor: number; usdCents: number; expenseCount: number;
 }
 
 export interface RecurringRule {
@@ -229,8 +243,16 @@ export interface RecurringRule {
 // --- Endpoints -------------------------------------------------------------
 
 export const api = {
-  installments: (period: string, months = 6, paidBy = '') =>
-    get<InstallmentForecast>(`/analytics/installments?${new URLSearchParams({ period, months: String(months), paidBy })}`),
+  events: () => get<HouseholdEvent[]>('/events'),
+  createEvent: (name: string, extraordinary = true) => post<HouseholdEvent>('/events', { name, extraordinary }),
+  updateEvent: (id: string, data: { name?: string; extraordinary?: boolean; archived?: boolean }) => patch<{ ok: true }>(`/events/${id}`, data),
+  assignEvent: (transactionIds: string[], eventId: string | null, allInstallments = false) =>
+    post<{ updated: number }>('/events/assign', { transactionIds, eventId, allInstallments }),
+  installments: (period: string, months = 6, paidBy = '', eventId?: string | null) => {
+    const q = new URLSearchParams({ period, months: String(months), paidBy });
+    if (eventId !== undefined) q.set('eventId', eventId ?? '');
+    return get<InstallmentForecast>(`/analytics/installments?${q}`);
+  },
   me: () => get<Me>('/auth/me'),
   login: (email: string, password: string) =>
     post<{ user: Me['user'] }>('/auth/login', { email, password }),
@@ -273,13 +295,14 @@ export const api = {
 
   merchants: () => get<Array<{ id: string; name: string }>>('/merchants'),
 
-  transactions: (params: { period?: string; type?: string; limit?: number; paidBy?: string; categoryId?: string | null; offset?: number } = {}) => {
+  transactions: (params: { period?: string; type?: string; limit?: number; paidBy?: string; categoryId?: string | null; eventId?: string | null; offset?: number } = {}) => {
     const q = new URLSearchParams();
     if (params.period) q.set('period', params.period);
     if (params.type) q.set('type', params.type);
     if (params.limit) q.set('limit', String(params.limit));
     if (params.paidBy) q.set('paidBy', params.paidBy);
     if (params.categoryId !== undefined) q.set('categoryId', params.categoryId ?? '');
+    if (params.eventId !== undefined) q.set('eventId', params.eventId ?? '');
     if (params.offset !== undefined) q.set('offset', String(params.offset));
     const qs = q.toString();
     return get<Transaction[]>(`/transactions${qs ? `?${qs}` : ''}`);

@@ -92,9 +92,9 @@ export default function Dashboard() {
           <p className="mt-3 rounded-xl bg-slate-100 px-3 py-2 text-sm text-ink-soft dark:bg-slate-800 dark:text-slate-300">
             En dólares del momento gastaste{' '}
             <strong className="tabular">{money(summary.expenseUsdCents, 'USD')}</strong>.
-            {previous.expenseUsdCents != null && previous.expenseUsdCents > 0 && (
+            {summary.habitualExpenseUsdCents != null && previous.habitualExpenseUsdCents != null && previous.habitualExpenseUsdCents > 0 && (
               <>
-                {' '}El mes pasado, {money(previous.expenseUsdCents, 'USD')}.
+                {' '}Para comparar, el gasto habitual fue {money(summary.habitualExpenseUsdCents, 'USD')}; el mes pasado, {money(previous.habitualExpenseUsdCents, 'USD')}. Sin eventos extraordinarios.
               </>
             )}
           </p>
@@ -102,16 +102,18 @@ export default function Dashboard() {
       </div>
 
       <Installments period={period} />
+      <Link to="/eventos" className="card block"><p className="font-semibold">Eventos</p><p className="mt-1 text-sm text-ink-mute dark:text-slate-400">Vacaciones, cumpleaños y otros gastos para mirar por separado →</p></Link>
 
       {/* Evolución */}
       {history.length > 1 && (
         <div className="card">
-          <p className="label mb-2">Últimos meses</p>
+          <p className="label mb-2">Últimos meses · gastos habituales</p>
+          <p className="mb-2 text-xs text-ink-mute dark:text-slate-400">Sin eventos extraordinarios. Los totales del mes los incluyen.</p>
           <div className="h-32">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={history.map((h) => ({
                 mes: periodLabel(h.period).slice(0, 3),
-                Gastos: h.expenseMinor / 100,
+                Gastos: h.habitualExpenseMinor / 100,
                 Ingresos: h.incomeMinor / 100,
               }))}>
                 <XAxis dataKey="mes" tickLine={false} axisLine={false}
@@ -247,10 +249,11 @@ export default function Dashboard() {
                   </span>
                   {t.changePct != null && (
                     <span className={t.changePct > 15 ? 'font-medium text-red-600 dark:text-red-400' : ''}>
-                      {pct(t.changePct, true)} vs. meses previos
+                      {pct(t.changePct, true)} habitual vs. meses previos
                     </span>
                   )}
                 </div>
+                {t.habitualMinor !== t.currentMinor && <p className="mt-1 text-xs text-ink-mute dark:text-slate-400">Habitual: {money(t.habitualMinor)} · el total incluye eventos extraordinarios.</p>}
                 </button>
                 <div id={`category-expenses-${categoryKey}`} hidden={!expanded}>
                   {expanded && <CategoryExpenses key={`${period}:${token}:${categoryKey}`} period={period} categoryId={t.categoryId} />}

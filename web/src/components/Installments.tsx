@@ -4,7 +4,7 @@ import { useRefresh } from '../App';
 import { api, type InstallmentForecast } from '../lib/api';
 import { money, pct, periodLabel } from '../lib/format';
 
-export default function Installments({ period, months = 6, paidBy = '' }: { period: string; months?: number; paidBy?: string }) {
+export default function Installments({ period, months = 6, paidBy = '', eventId }: { period: string; months?: number; paidBy?: string; eventId?: string | null }) {
   const { token } = useRefresh();
   const [data, setData] = useState<InstallmentForecast | null>(null);
   const [error, setError] = useState(false);
@@ -13,10 +13,10 @@ export default function Installments({ period, months = 6, paidBy = '' }: { peri
     let active = true;
     setData(null);
     setError(false);
-    api.installments(period, months, paidBy).then(result => { if (active) setData(result); })
+    api.installments(period, months, paidBy, eventId).then(result => { if (active) setData(result); })
       .catch(() => { if (active) setError(true); });
     return () => { active = false; };
-  }, [period, months, paidBy, token, retry]);
+  }, [period, months, paidBy, eventId, token, retry]);
 
   return <section className="card" aria-label="Cuotas comprometidas">
     <h2 className="font-semibold">Cuotas comprometidas</h2>
@@ -49,6 +49,7 @@ export default function Installments({ period, months = 6, paidBy = '' }: { peri
                     <div className="flex flex-wrap justify-between gap-1"><span className="min-w-0 break-words font-medium">{item.description}</span><span className="tabular">{money(item.amountMinor, item.currency)}</span></div>
                     <p className="mt-1 text-xs text-ink-mute dark:text-slate-400">Cuota {item.n}/{item.of} · {item.userName ?? 'Hogar'} · {item.accountName}</p>
                     <p className="mt-1 text-xs">{item.n === item.of ? 'Última cuota este mes' : `Termina en ${periodLabel(item.lastPeriod)}`}</p>
+                    {item.eventName && <p className="mt-1 text-xs text-ant">Evento: {item.eventName}</p>}
                   </li>)}
                 </ul>
               </details>)}

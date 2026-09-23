@@ -1,4 +1,9 @@
-# Tarjetas y adicionales (v0.3.0)
+# Tarjetas y adicionales (v0.4.0)
+
+Los consumos y cuotas pueden etiquetarse con eventos. El alcance individual
+o a toda la compra es explicito; ver [EVENTOS.md](EVENTOS.md). Un evento
+extraordinario no reduce el importe de cuotas comprometidas. Se puede filtrar
+por evento en Movimientos. El esquema actual es v5 por las tablas de eventos.
 
 ## Cuotas comprometidas
 
@@ -34,8 +39,9 @@ persona aplica tambien al ingreso. Sin referencia no se calcula porcentaje.
 
 API autenticada: GET /api/analytics/installments?period=AAAA-MM&months=6.
 Admite de 1 a 24 meses y paidBy opcional; aisla datos por hogar y no usa cache.
-La funcionalidad es de solo lectura, no requiere migracion (sigue esquema v4),
-no genera movimientos y no altera saldos. Funciona con resumenes ya cargados.
+La proyeccion es de solo lectura, no genera movimientos y no altera saldos.
+Funciona con resumenes ya cargados. Las cuotas se introdujeron en v0.3.0 sin
+migracion; v0.4.0 agrega las tablas de eventos (esquema v5).
 
 Validacion v0.3.0: typecheck, 88 pruebas, compilaciones server/web con
 APP_BASE=hormiga y revision local en navegador con datos sinteticos.
@@ -137,8 +143,9 @@ puerto. APP_BASE mantiene soporte para el despliegue en subdirectorio.
 Antes del despliegue: backup consistente SQLite, ensayo en copia y prueba
 del OCR con Node 22 Linux. La migracion v4 agrega las tablas de vinculacion;
 no incorpora gastos automaticamente al arrancar ni cambia datos previos.
-El codigo viejo rechaza una DB v4: rollback
-requiere el backup y cuidado con escrituras posteriores.
+La migracion v5 agrega eventos, relaciones y reglas de compra. El codigo de
+versiones anteriores rechaza una base mas nueva: rollback requiere evaluar
+el backup y las escrituras posteriores.
 
 Configurar en el proxy de Hormiga un limite de subida de al menos 13 MB y
 timeout mayor a 180 s solo para el analisis de PDFs. Mantener sin cambios

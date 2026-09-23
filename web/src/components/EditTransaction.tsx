@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../App';
 import { ApiError, api, type Category, type Transaction } from '../lib/api';
 import { amountForInput } from '../lib/format';
+import EventPicker from './EventPicker';
 
 /**
  * Edición de un movimiento ya cargado.
@@ -32,6 +33,8 @@ export default function EditTransaction({
   const [amount, setAmount] = useState(amountForInput(tx.amountMinor));
   const [date, setDate] = useState(tx.date);
   const [categoryId, setCategoryId] = useState<string | null>(tx.categoryId);
+  const [eventId, setEventId] = useState<string | null>(tx.eventId ?? null);
+  const [eventAllInstallments, setEventAllInstallments] = useState(false);
   const [merchantName, setMerchantName] = useState(tx.merchantName ?? '');
   const [note, setNote] = useState(tx.note ?? '');
   const [paidByUserId, setPaidByUserId] = useState<string | null>(tx.paidByUserId);
@@ -61,6 +64,9 @@ export default function EditTransaction({
   // histórico correcto.
   const cambios = useMemo(() => {
     const out: Record<string, unknown> = {};
+    if (eventId !== (tx.eventId ?? null) || eventAllInstallments) {
+      out.eventId = eventId; out.eventAllInstallments = eventAllInstallments;
+    }
     if (amount !== amountForInput(tx.amountMinor)) out.amount = amount;
     if (date !== tx.date) out.date = date;
     if (!esTransferencia) {
@@ -70,7 +76,7 @@ export default function EditTransaction({
     }
     if (note !== (tx.note ?? '')) out.note = note || null;
     return out;
-  }, [amount, date, categoryId, merchantName, note, paidByUserId, tx, esTransferencia]);
+  }, [amount, date, categoryId, merchantName, note, paidByUserId, tx, esTransferencia, eventId, eventAllInstallments]);
 
   const hayCambios = Object.keys(cambios).length > 0;
 
@@ -185,6 +191,13 @@ export default function EditTransaction({
             </div>
           </div>
         )}
+
+        {tx.type === 'gasto' && <div className="card mt-3 space-y-3">
+          <EventPicker value={eventId} onChange={setEventId} />
+          {tx.canApplyEventToPurchase && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={eventAllInstallments} onChange={e => setEventAllInstallments(e.target.checked)} />Aplicar también a las otras cuotas de esta compra, incluidas las de próximos resúmenes.</label>}
+          {tx.statementId && !tx.canApplyEventToPurchase && <p className="text-xs text-ink-mute">Se aplica a este movimiento. Para otras cuotas sin identificación exacta, usá la selección de gastos.</p>}
+          <p className="text-xs text-ink-mute">El evento no cambia el importe ni la categoría. Sin marcar otras cuotas, solo se modifica este movimiento.</p>
+        </div>}
 
         <div className="card mt-3 space-y-3">
           <div>
