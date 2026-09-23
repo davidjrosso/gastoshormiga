@@ -14,6 +14,49 @@ import { transactionRoutes } from '../src/routes/transactions.js';
 const app = new Hono();
 app.route('/transactions', transactionRoutes);
 
+describe('GET /transactions: detalle por categoría', () => {
+  it('filtra por mes, gasto y categoría sin mezclar hogares; incluye Sin categoría', async () => {
+    const f = makeHousehold();
+    const other = makeHousehold();
+    const token = makeSession(f.userId);
+    const expected = addTx(f, { date: '2026-08-15', amountMinor: 12345 });
+    const uncategorized = addTx(f, { date: '2026-08-15', amountMinor: 900, categoryId: null });
+    addTx(f, { date: '2026-09-15', amountMinor: 100 });
+    addTx(f, { date: '2026-08-15', amountMinor: 100, type: 'ingreso' });
+    addTx(other, { date: '2026-08-15', amountMinor: 100, categoryId: f.categoryId });
+    const getCategory = async (category: string) => {
+      const res = await app.request(`/transactions?period=2026-08&type=gasto&categoryId=${category}`, {
+        headers: { Cookie: `hormiga_session=${token}` },
+      });
+      assert.equal(res.status, 200);
+      return await res.json() as Array<{ id: string }>;
+    };
+    assert.deepEqual((await getCategory(f.categoryId)).map((tx) => tx.id), [expected]);
+    assert.deepEqual((await getCategory('')).map((tx) => tx.id), [uncategorized]);
+  });
+
+  it('pagina sin perder ni repetir gastos con la misma fecha y hora', async () => {
+    const f = makeHousehold();
+    const token = makeSession(f.userId);
+    const ids = Array.from({ length: 5 }, () => addTx(f, { date: '2026-08-15', amountMinor: 100 }));
+    sqlite.prepare('UPDATE transactions SET created_at = 1 WHERE household_id = ?').run(f.householdId);
+    const found: string[] = [];
+    for (const offset of [0, 2, 4, 6]) {
+      const res = await app.request(`/transactions?categoryId=${f.categoryId}&limit=2&offset=${offset}`, {
+        headers: { Cookie: `hormiga_session=${token}` },
+      });
+      assert.equal(res.status, 200);
+      const page = await res.json() as Array<{ id: string }>;
+      found.push(...page.map((tx) => tx.id));
+    }
+    assert.deepEqual(found, ids.sort().reverse());
+    const bad = await app.request('/transactions?offset=-1', {
+      headers: { Cookie: `hormiga_session=${token}` },
+    });
+    assert.equal(bad.status, 400);
+  });
+});
+
 function patch(token: string, id: string, body: unknown) {
   return app.request(`/transactions/${id}`, {
     method: 'PATCH',

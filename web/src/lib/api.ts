@@ -260,12 +260,14 @@ export const api = {
 
   merchants: () => get<Array<{ id: string; name: string }>>('/merchants'),
 
-  transactions: (params: { period?: string; type?: string; limit?: number; paidBy?: string } = {}) => {
+  transactions: (params: { period?: string; type?: string; limit?: number; paidBy?: string; categoryId?: string | null; offset?: number } = {}) => {
     const q = new URLSearchParams();
     if (params.period) q.set('period', params.period);
     if (params.type) q.set('type', params.type);
     if (params.limit) q.set('limit', String(params.limit));
     if (params.paidBy) q.set('paidBy', params.paidBy);
+    if (params.categoryId !== undefined) q.set('categoryId', params.categoryId ?? '');
+    if (params.offset !== undefined) q.set('offset', String(params.offset));
     const qs = q.toString();
     return get<Transaction[]>(`/transactions${qs ? `?${qs}` : ''}`);
   },

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireAuth, type AppEnv } from '../auth.js';
@@ -138,6 +138,10 @@ transactionRoutes.get('/', (c) => {
   const period = c.req.query('period');
   const type = c.req.query('type');
   const limit = Math.min(Number(c.req.query('limit') ?? 200), 1000);
+  const offset = Number(c.req.query('offset') ?? 0);
+  if (!Number.isSafeInteger(offset) || offset < 0) {
+    return c.json({ error: 'Desplazamiento inválido' }, 400);
+  }
 
   const conditions = [eq(transactions.householdId, user.householdId)];
   if (period && /^\d{4}-\d{2}$/.test(period)) {
@@ -153,6 +157,12 @@ transactionRoutes.get('/', (c) => {
   // no devuelve nada.
   const paidBy = c.req.query('paidBy');
   if (paidBy) conditions.push(eq(transactions.paidByUserId, paidBy));
+  const categoryId = c.req.query('categoryId');
+  if (categoryId !== undefined) {
+    conditions.push(categoryId === ''
+      ? isNull(transactions.categoryId)
+      : eq(transactions.categoryId, categoryId));
+  }
 
   const rows = db
     .select({
@@ -169,8 +179,9 @@ transactionRoutes.get('/', (c) => {
     .leftJoin(merchants, eq(merchants.id, transactions.merchantId))
     .leftJoin(accounts, eq(accounts.id, transactions.accountId))
     .where(and(...conditions))
-    .orderBy(desc(transactions.date), desc(transactions.createdAt))
+    .orderBy(desc(transactions.date), desc(transactions.createdAt), desc(transactions.id))
     .limit(limit)
+    .offset(offset)
     .all();
 
   return c.json(

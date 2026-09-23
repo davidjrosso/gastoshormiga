@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { useAuth, useRefresh } from '../App';
+import CategoryExpenses from '../components/CategoryExpenses';
 import { api, type Dashboard as DashboardData, type HormigaItem, type Summary } from '../lib/api';
 import { money, moneyShort, pct, periodLabel, currentPeriod, shiftPeriod } from '../lib/format';
 
@@ -10,6 +11,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [history, setHistory] = useState<Summary[]>([]);
   const [hormiga, setHormiga] = useState<HormigaItem[]>([]);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const { token } = useRefresh();
   const { me } = useAuth();
 
@@ -213,14 +215,23 @@ export default function Dashboard() {
           </p>
         )}
         <div className="space-y-2.5">
-          {trends.slice(0, 10).map((t) => {
+          {trends.map((t) => {
+            const categoryKey = t.categoryId ?? 'uncategorized';
+            const expanded = expandedCategory === categoryKey;
             const width = trends[0].currentMinor > 0
               ? (t.currentMinor / trends[0].currentMinor) * 100
               : 0;
             return (
               <div key={t.categoryId ?? 'null'}>
+                <button
+                  type="button"
+                  className="block w-full rounded-lg py-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-ant"
+                  aria-expanded={expanded}
+                  aria-controls={`category-expenses-${categoryKey}`}
+                  onClick={() => setExpandedCategory(expanded ? null : categoryKey)}
+                >
                 <div className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="truncate font-medium">{t.categoryName}</span>
+                  <span className="min-w-0 break-words font-medium"><span aria-hidden="true">{expanded ? '▾' : '▸'}</span> {t.categoryName}</span>
                   <span className="tabular shrink-0 font-semibold">
                     {moneyShort(t.currentMinor)}
                   </span>
@@ -238,6 +249,10 @@ export default function Dashboard() {
                       {pct(t.changePct, true)} vs. meses previos
                     </span>
                   )}
+                </div>
+                </button>
+                <div id={`category-expenses-${categoryKey}`} hidden={!expanded}>
+                  {expanded && <CategoryExpenses key={`${period}:${token}:${categoryKey}`} period={period} categoryId={t.categoryId} />}
                 </div>
               </div>
             );
