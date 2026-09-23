@@ -1,4 +1,44 @@
-# Tarjetas y adicionales (v0.2.1)
+# Tarjetas y adicionales (v0.3.0)
+
+## Cuotas comprometidas
+
+Resumen y Movimientos permiten navegar a meses futuros y consultar las cuotas
+proyectadas, separadas de los gastos confirmados. Resumen muestra seis meses;
+Movimientos muestra el mes seleccionado y respeta el filtro por persona.
+Cada detalle indica compra, persona, tarjeta, cuota y mes de finalizacion.
+
+La base es el ultimo resumen confirmado de cada cuenta de tarjeta. Se toman
+solo consumos positivos en cuotas con movimientos efectivamente incorporados
+al hogar, por su importe asignado y moneda original. Se excluyen borradores,
+consumos excluidos, reintegros, impuestos, intereses y Solo liquidacion.
+Las cuentas archivadas conservan compromisos ya asumidos.
+
+Se proyectan cuotas n+1 hasta N, un mes por cuota desde el mes del cierre,
+conservando el importe de la ultima cuota facturada. ARS y USD permanecen
+separados. El vencimiento que se muestra corresponde al resumen fuente;
+no se inventan fechas futuras de cierre o vencimiento.
+
+Un nuevo resumen confirmado sustituye la base completa de esa tarjeta; no se
+suman proyecciones de resumenes anteriores ni se intenta identificar compras
+por similitud de texto. El mes ya facturado no agrega cuotas proyectadas: sus
+consumos estan en los movimientos confirmados. Si el nuevo resumen no tiene
+movimientos incorporados al hogar, se informa y no se reutiliza el anterior.
+Esto presupone resumenes completos: no se arrastran planes ausentes del ultimo.
+Si faltan resumenes, se conserva la estimacion con su fecha de referencia.
+
+El porcentaje compara exclusivamente cuotas ARS con ingresos ARS del ultimo
+mes con ingreso positivo entre los tres meses completos anteriores al mes
+actual (o al consultado, si es anterior). El periodo y el importe de referencia
+se muestran; no se presentan como un sueldo futuro garantizado. El filtro por
+persona aplica tambien al ingreso. Sin referencia no se calcula porcentaje.
+
+API autenticada: GET /api/analytics/installments?period=AAAA-MM&months=6.
+Admite de 1 a 24 meses y paidBy opcional; aisla datos por hogar y no usa cache.
+La funcionalidad es de solo lectura, no requiere migracion (sigue esquema v4),
+no genera movimientos y no altera saldos. Funciona con resumenes ya cargados.
+
+Validacion v0.3.0: typecheck, 88 pruebas, compilaciones server/web con
+APP_BASE=hormiga y revision local en navegador con datos sinteticos.
 
 ## Alcance
 

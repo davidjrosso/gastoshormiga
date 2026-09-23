@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth, useRefresh } from '../App';
 import EditTransaction from '../components/EditTransaction';
+import Installments from '../components/Installments';
 import { api, type Transaction } from '../lib/api';
 import { currentPeriod, dayLabel, money, periodLabel, shiftPeriod } from '../lib/format';
 
@@ -51,7 +52,7 @@ export default function Movimientos() {
         <h1 className="text-lg font-bold capitalize">{periodLabel(period)}</h1>
         <button className="rounded-lg px-3 py-1 text-xl text-ink-mute disabled:opacity-25"
                 onClick={() => setPeriod(shiftPeriod(period, -1))}
-                disabled={period === currentPeriod()} aria-label="Mes siguiente">›</button>
+                aria-label="Mes siguiente">›</button>
       </header>
 
       <div className="flex gap-2 overflow-x-auto px-1 pb-1">
@@ -98,9 +99,11 @@ export default function Movimientos() {
         </div>
       )}
 
+      {(filter === 'todos' || filter === 'gasto') && <Installments period={period} months={1} paidBy={paidBy} />}
+
       {items.length === 0 && (
         <div className="card text-sm text-ink-mute dark:text-slate-400">
-          No hay movimientos en este mes.
+          No hay movimientos confirmados en este mes.
         </div>
       )}
 

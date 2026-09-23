@@ -201,6 +201,17 @@ export interface Dashboard {
   rates: FxRate[];
 }
 
+export interface InstallmentForecast {
+  incomeReference: { period: string; amountMinor: number } | null;
+  sources: { statementId: string; accountName: string; closeDate: string; dueDate: string; hasHouseholdMovements: boolean }[];
+  months: {
+    period: string; arsMinor: number; usdCents: number; shareOfIncomePct: number | null;
+    items: { statementId: string; lineId: string; accountName: string; description: string;
+      userId: string; userName: string | null; amountMinor: number; currency: 'ARS' | 'USD';
+      n: number; of: number; lastPeriod: string }[];
+  }[];
+}
+
 export interface RecurringRule {
   id: string;
   description: string;
@@ -218,6 +229,8 @@ export interface RecurringRule {
 // --- Endpoints -------------------------------------------------------------
 
 export const api = {
+  installments: (period: string, months = 6, paidBy = '') =>
+    get<InstallmentForecast>(`/analytics/installments?${new URLSearchParams({ period, months: String(months), paidBy })}`),
   me: () => get<Me>('/auth/me'),
   login: (email: string, password: string) =>
     post<{ user: Me['user'] }>('/auth/login', { email, password }),

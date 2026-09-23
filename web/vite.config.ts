@@ -57,6 +57,7 @@ export default defineConfig({
         // plata es peor que un error honesto.
         navigateFallback: `${APP_BASE}index.html`,
         runtimeCaching: [
+          { urlPattern: /\/api\/analytics\/installments(?:\?|$)/, handler: 'NetworkOnly' },
           { urlPattern: /\/api\/statements(?:\/|$)/, handler: 'NetworkOnly' },
           {
             urlPattern: /\/api\/.*/,

@@ -5,6 +5,7 @@ import { categoryTrends, detectHormiga, detectSubscriptions, monthlySummary, spe
 import { accountBalances, savingsSummary, usdBoughtInPeriod } from '../analytics/savings.js';
 import { db } from '../db/index.js';
 import { households } from '../db/schema.js';
+import { installmentForecast } from '../analytics/installments.js';
 import { fetchRate, getLatestRates, upsertRate, type RateType } from '../fx/rates.js';
 import { parseAmountToMinor, shiftPeriod, todayISO } from '../lib/money.js';
 
@@ -12,6 +13,15 @@ export const analyticsRoutes = new Hono<AppEnv>();
 analyticsRoutes.use('*', requireAuth);
 
 const currentPeriod = () => todayISO().slice(0, 7);
+
+analyticsRoutes.get('/installments', (c) => {
+  c.header('Cache-Control', 'no-store');
+  const period = c.req.query('period') ?? currentPeriod();
+  const months = Number(c.req.query('months') ?? 6);
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period) || !Number.isInteger(months) || months < 1 || months > 24)
+    return c.json({ error: 'Período o cantidad de meses inválidos.' }, 400);
+  return c.json(installmentForecast(c.get('user').householdId, period, months, c.req.query('paidBy') || undefined));
+});
 
 function periodParam(c: { req: { query: (k: string) => string | undefined } }): string {
   const p = c.req.query('period');

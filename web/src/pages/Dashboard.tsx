@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
 import { useAuth, useRefresh } from '../App';
 import CategoryExpenses from '../components/CategoryExpenses';
+import Installments from '../components/Installments';
 import { api, type Dashboard as DashboardData, type HormigaItem, type Summary } from '../lib/api';
 import { money, moneyShort, pct, periodLabel, currentPeriod, shiftPeriod } from '../lib/format';
 
@@ -27,7 +28,6 @@ export default function Dashboard() {
   if (!data) return <div className="p-6 text-ink-mute">cargando…</div>;
 
   const { summary, previous, trends, savings } = data;
-  const isCurrentMonth = period === currentPeriod();
 
   return (
     <div className="space-y-3 p-3">
@@ -43,7 +43,6 @@ export default function Dashboard() {
         <button
           className="rounded-lg px-3 py-1 text-xl text-ink-mute disabled:opacity-25"
           onClick={() => setPeriod(shiftPeriod(period, -1))}
-          disabled={isCurrentMonth}
           aria-label="Mes siguiente"
         >
           ›
@@ -52,7 +51,7 @@ export default function Dashboard() {
 
       {/* Balance del mes */}
       <div className="card">
-        <p className="label">Quedó en el mes</p>
+        <p className="label">{period > currentPeriod() ? 'Balance de movimientos confirmados' : 'Quedó en el mes'}</p>
         <p
           className={`mt-1 text-4xl font-bold tabular ${
             summary.balanceMinor >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'
@@ -101,6 +100,8 @@ export default function Dashboard() {
           </p>
         )}
       </div>
+
+      <Installments period={period} />
 
       {/* Evolución */}
       {history.length > 1 && (
