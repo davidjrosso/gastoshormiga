@@ -1,4 +1,4 @@
-# Compras — v0.5.1
+# Compras — v0.5.2
 
 Lista compartida por hogar. Compras reemplaza Ahorros en la barra inferior;
 Ahorros conserva su ruta y datos, con acceso desde Ajustes. El carrito verde
@@ -81,4 +81,4 @@ resolucion, historial/repetir, frecuentes y duplicados. Vista de ancho movil.
 No se usaron ni modificaron datos productivos.
 
 Categorias ordenadas alfabeticamente en espanol (sin distinguir mayusculas o
-acentos) en administracion, selectores y Resumen. Version 0.5.1.
+acentos) en administracion y selectores. En Resumen, "En que se fue" va por monto de mayor a menor. Version 0.5.2.

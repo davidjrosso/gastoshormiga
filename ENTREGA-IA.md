@@ -1,22 +1,16 @@
-# Hormiga 0.5.1: Compras compartidas
+# Hormiga 0.5.2: orden por monto en Resumen
 
-Entrega local autorizada: navegacion, carga rapida, lista compartida offline e
-iconos. Comprado tacha a la derecha; no crea precios ni gastos. Ahorros conserva
-pantalla/datos y pasa a Ajustes. Ver docs/COMPRAS.md.
+Corrige "En que se fue": categorias de mayor a menor importe del mes.
+Administracion y selectores conservan el orden alfabetico en espanol.
+Server/web y ambos lockfiles actualizados a 0.5.2.
 
-Server/web y lockfiles en 0.5.1. Sin dependencias nuevas. Migracion aditiva v6:
-shopping_items y shopping_operations. No modifica datos financieros existentes.
-Las versiones hasta 0.4.1 rechazan v6; no usarlas sobre una base ya migrada.
+Sin dependencias nuevas, migraciones ni cambios de datos respecto de 0.5.1.
+El esquema permanece en v6 y Compras conserva su comportamiento.
 
-Validacion: 105 pruebas server y 3 del modelo cliente, typecheck, builds con
-APP_BASE=hormiga. QA sintetico de desconexion/reconexion, conflictos,
-historial, duplicados y vista movil. Sin cambios en PROD.
+Validacion requerida: typecheck, 105 pruebas server, 3 cliente y builds con
+APP_BASE=hormiga. Comprobar orden descendente en navegador de produccion.
 
-David autorizo subir a Git y desplegar esta entrega el 28/09/2026. Antes de activar:
-comprobar commit real, backup consistente y checksum, probar migracion en copia,
-instalar con lockfiles Linux, compilar con APP_BASE=hormiga, conservar assets PWA
-y codigo previos. Reiniciar solo Hormiga y comprobar Ticketera. No restaurar
-automaticamente la base ni reemplazarla con DEV. Registrar evidencia privada.
-
-Categorias ordenadas alfabeticamente en espanol (sin distinguir mayusculas o
-acentos) en administracion, selectores y Resumen. Version 0.5.1.
+Correccion del despliegue autorizado por David el 28/09/2026.
+Antes de activar: verificar commit, backup consistente y arranque en copia,
+compilar Linux, conservar codigo/assets anteriores, reiniciar solo Hormiga
+ y comprobar Ticketera. No reemplazar PROD por DEV. Registro privado en .local/.
