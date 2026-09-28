@@ -218,7 +218,7 @@ export default function Dashboard() {
           </p>
         )}
         <div className="space-y-2.5">
-          {trends.map((t) => {
+          {[...trends].sort((a, b) => a.categoryName.localeCompare(b.categoryName, 'es', { sensitivity: 'base', numeric: true })).map((t) => {
             const categoryKey = t.categoryId ?? 'uncategorized';
             const expanded = expandedCategory === categoryKey;
             const width = trends[0].currentMinor > 0

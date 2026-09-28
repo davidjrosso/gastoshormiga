@@ -1,3 +1,4 @@
+import CategoryIcon, { categoryIconId, IconPicker } from '../components/CategoryIcon';
 import { useEffect, useState } from 'react';
 import { useRefresh } from '../App';
 import { api, type Category } from '../lib/api';
@@ -7,12 +8,6 @@ import { api, type Category } from '../lib/api';
 const COLORES = [
   '#ef4444', '#f97316', '#f59e0b', '#eab308', '#84cc16', '#22c55e', '#10b981',
   '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1', '#8b5cf6', '#d946ef', '#64748b',
-];
-
-const ICONOS = [
-  '🛒', '🍽️', '☕', '🛵', '🚌', '⛽', '🏠', '🏢', '💡', '📶', '⚕️', '💊',
-  '🎬', '👕', '🎓', '🐾', '🎁', '🔧', '📺', '🛡️', '📄', '💼', '💻', '🏷️',
-  '🥬', '✈️', '📚', '🧾', '•',
 ];
 
 export default function Categorias() {
@@ -102,7 +97,7 @@ export default function Categorias() {
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base"
                   style={{ backgroundColor: `${c.color}22` }}
                 >
-                  {c.icon}
+                  <CategoryIcon icon={c.icon} name={c.name} color={c.color} />
                 </span>
 
                 <div className="min-w-0 flex-1">
@@ -177,7 +172,8 @@ function Editor({
   onGuardado: () => void;
 }) {
   const [name, setName] = useState(categoria?.name ?? '');
-  const [icon, setIcon] = useState(categoria?.icon ?? '•');
+  const [icon, setIcon] = useState('lucide:' + categoryIconId(categoria?.icon, categoria?.name));
+  const [iconSearch, setIconSearch] = useState('');
   const [color, setColor] = useState(categoria?.color ?? '#64748b');
   const [isFixed, setIsFixed] = useState(categoria?.isFixed ?? false);
   const [guardando, setGuardando] = useState(false);
@@ -223,21 +219,7 @@ function Editor({
 
           <div>
             <p className="label mb-2">Ícono</p>
-            <div className="flex flex-wrap gap-1.5">
-              {ICONOS.map((i) => (
-                <button
-                  key={i}
-                  onClick={() => setIcon(i)}
-                  className={`flex h-10 w-10 items-center justify-center rounded-xl text-lg transition ${
-                    icon === i
-                      ? 'bg-ant/20 ring-2 ring-ant'
-                      : 'bg-slate-100 dark:bg-slate-800'
-                  }`}
-                >
-                  {i}
-                </button>
-              ))}
-            </div>
+            <IconPicker value={icon} onChange={setIcon} search={iconSearch} onSearch={setIconSearch} />
           </div>
 
           <div>
@@ -281,7 +263,7 @@ function Editor({
               className="flex h-9 w-9 items-center justify-center rounded-full text-base"
               style={{ backgroundColor: `${color}22` }}
             >
-              {icon}
+              <CategoryIcon icon={icon} name={name} color={color} />
             </span>
             <span className="text-sm font-medium">{name || 'Sin nombre'}</span>
           </div>

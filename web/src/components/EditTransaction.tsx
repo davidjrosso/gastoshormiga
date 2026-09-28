@@ -1,3 +1,4 @@
+import CategoryIcon from './CategoryIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../App';
 import { ApiError, api, type Category, type Transaction } from '../lib/api';
@@ -146,7 +147,7 @@ export default function EditTransaction({
                   }`}
                   style={categoryId === c.id ? { backgroundColor: c.color } : undefined}
                 >
-                  <span className="mr-1">{c.icon}</span>
+                  <span className="mr-1"><CategoryIcon icon={c.icon} name={c.name} color={c.color} /></span>
                   {c.name}
                 </button>
               ))}

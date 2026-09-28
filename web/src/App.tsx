@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, ShoppingCart } from 'lucide-react';
 import { ApiError, api, type Me } from './lib/api';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -13,6 +13,10 @@ import Categorias from './pages/Categorias';
 import QuickAdd from './components/QuickAdd';
 import Tarjetas from './pages/Tarjetas';
 import Eventos from './pages/Eventos';
+import Compras from './pages/Compras';
+import ShoppingProvider, { ShoppingCount } from './components/ShoppingProvider';
+import ShoppingEditor from './components/ShoppingEditor';
+import { forgetOfflineProfile, offlineProfile, rememberOfflineProfile } from './lib/offline-session';
 
 interface AuthState {
   me: Me | null;
@@ -34,13 +38,17 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [shoppingOpen, setShoppingOpen] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
 
   const reload = useCallback(async () => {
     try {
-      setMe(await api.me());
+      const profile = await api.me();
+      rememberOfflineProfile(profile);
+      setMe(profile);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) setMe(null);
+      if (err instanceof ApiError && err.status === 401) { forgetOfflineProfile(); setMe(null); }
+      else if (!(err instanceof ApiError)) setMe(offlineProfile());
       else console.error(err);
     } finally {
       setLoading(false);
@@ -49,6 +57,13 @@ export default function App() {
 
   useEffect(() => {
     void reload();
+    const expired = () => { forgetOfflineProfile(); setMe(null); setShoppingOpen(false); setAddOpen(false); };
+    window.addEventListener('hormiga-session-expired', expired);
+    window.addEventListener('online', reload);
+    return () => {
+      window.removeEventListener('hormiga-session-expired', expired);
+      window.removeEventListener('online', reload);
+    };
   }, [reload]);
 
   // Al entrar, materializa los gastos fijos del mes. Es idempotente, así que
@@ -72,6 +87,7 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={{ me, reload }}>
+      <ShoppingProvider key={`${me.household.id}:${me.user.id}`} me={me}>
       <RefreshContext.Provider
         value={{ token: refreshToken, bump: () => setRefreshToken((t) => t + 1) }}
       >
@@ -94,6 +110,7 @@ export default function App() {
             <Route path="/movimientos" element={<Movimientos />} />
             <Route path="/hormiga" element={<Hormiga />} />
             <Route path="/ahorros" element={<Ahorros />} />
+            <Route path="/compras" element={<Compras />} />
             <Route path="/fijos" element={<Fijos />} />
             <Route path="/ajustes" element={<Ajustes />} />
             {/* Fuera de la barra inferior a propósito: se configura una vez
@@ -115,6 +132,11 @@ export default function App() {
         </button>}
 
         <BottomNav />
+        {!onStatements && <button onClick={() => setShoppingOpen(true)} aria-label="Agregar producto a Compras"
+          className="fixed bottom-36 right-4 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-lg transition active:scale-95 sm:right-[max(1rem,calc(50%-19rem))]">
+          <ShoppingCart size={26} />
+        </button>}
+        {shoppingOpen && <ShoppingEditor onClose={() => setShoppingOpen(false)} />}
 
         {addOpen && (
           <QuickAdd
@@ -123,6 +145,7 @@ export default function App() {
           />
         )}
       </RefreshContext.Provider>
+      </ShoppingProvider>
     </AuthContext.Provider>
   );
 }
@@ -131,7 +154,7 @@ const NAV = [
   { to: '/', label: 'Resumen', icon: '◎' },
   { to: '/movimientos', label: 'Movimientos', icon: '≡' },
   { to: '/hormiga', label: 'Hormiga', icon: '🐜' },
-  { to: '/ahorros', label: 'Ahorros', icon: '$' },
+  { to: '/compras', label: 'Compras', icon: 'shopping' },
   { to: '/fijos', label: 'Fijos', icon: '↻' },
   { to: '/tarjetas', label: 'Tarjetas', icon: 'card' },
 ];
@@ -157,8 +180,8 @@ function BottomNav() {
               }`
             }
           >
-            <span className="text-lg leading-none">{item.icon === 'card' ? <CreditCard size={18}/> : item.icon}</span>
-            {item.label}
+            <span className="text-lg leading-none">{item.icon === 'card' ? <CreditCard size={18}/> : item.icon === 'shopping' ? <ShoppingCart size={18}/> : item.icon}</span>
+            <span>{item.label}{item.icon === 'shopping' && <ShoppingCount />}</span>
           </NavLink>
         ))}
       </div>

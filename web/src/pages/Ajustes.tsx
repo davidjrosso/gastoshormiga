@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../App';
 import { api } from '../lib/api';
+import { forgetOfflineProfile } from '../lib/offline-session';
 
 export default function Ajustes() {
   const { me } = useAuth();
@@ -62,6 +63,7 @@ export default function Ajustes() {
         </div>
         <span className="text-xl text-ink-mute">›</span>
       </Link>
+      <Link to="/ahorros" className="card flex items-center justify-between"><div><p className="label">Ahorros</p><p className="mt-1 text-sm">Tenencias y compra de dólares</p></div><span aria-hidden="true">›</span></Link>
       <Link to="/eventos" className="card block"><p className="label">Eventos</p><p className="mt-1 text-sm">Agrupar gastos y separar los extraordinarios →</p></Link>
 
       <div className="card">
@@ -110,7 +112,7 @@ export default function Ajustes() {
         <p className="mt-1 text-sm">{me.user.email}</p>
         <button
           className="btn-ghost mt-3 w-full text-red-600 dark:text-red-400"
-          onClick={async () => { await api.logout(); location.reload(); }}
+          onClick={async () => { await api.logout(); forgetOfflineProfile(); location.reload(); }}
         >
           Cerrar sesión
         </button>

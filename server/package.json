@@ -1,9 +1,11 @@
 {
   "name": "hormiga-server",
-  "version": "0.4.1",
+  "version": "0.5.1",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.13.0" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",

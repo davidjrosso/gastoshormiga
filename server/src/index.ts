@@ -14,6 +14,7 @@ import { recurringRoutes } from './routes/recurring.js';
 import { transactionRoutes } from './routes/transactions.js';
 import { statementRoutes } from './routes/statements.js';
 import { eventRoutes } from './routes/events.js';
+import { shoppingRoutes } from './routes/shopping.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const isProd = process.env.NODE_ENV === 'production';
@@ -42,6 +43,7 @@ app.route('/api/auth', authRoutes);
 app.route('/api/transactions', transactionRoutes);
 app.route('/api/statements', statementRoutes);
 app.route('/api/events', eventRoutes);
+app.route('/api/shopping', shoppingRoutes);
 app.route('/api/recurring', recurringRoutes);
 app.route('/api/analytics', analyticsRoutes);
 app.route('/api', dataRoutes);

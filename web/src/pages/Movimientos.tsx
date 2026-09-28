@@ -1,3 +1,4 @@
+import CategoryIcon from '../components/CategoryIcon';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth, useRefresh } from '../App';
@@ -175,7 +176,7 @@ export default function Movimientos() {
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-base"
                   style={{ backgroundColor: `${t.categoryColor ?? '#94a3b8'}22` }}
                 >
-                  {t.type === 'transferencia' ? '⇄' : t.categoryIcon ?? '•'}
+                  {t.type === 'transferencia' ? '⇄' : <CategoryIcon icon={t.categoryIcon} name={t.categoryName} color={t.categoryColor ?? undefined} />}
                 </span>
 
                 <div className="min-w-0 flex-1">

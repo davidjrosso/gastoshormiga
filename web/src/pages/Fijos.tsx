@@ -1,3 +1,4 @@
+import CategoryIcon from '../components/CategoryIcon';
 import { useEffect, useState } from 'react';
 import { useAuth, useRefresh } from '../App';
 import { api, type Account, type Category, type RecurringRule } from '../lib/api';
@@ -109,7 +110,7 @@ export default function Fijos() {
                 <p className="truncate font-semibold">{r.description}</p>
                 <p className="text-xs text-ink-mute dark:text-slate-400">
                   Día {r.dayOfMonth} de cada mes
-                  {cat && <> · {cat.icon} {cat.name}</>}
+                  {cat && <> · <CategoryIcon icon={cat.icon} name={cat.name} color={cat.color} /> {cat.name}</>}
                 </p>
               </div>
               <span className="tabular shrink-0 font-semibold">
@@ -180,7 +181,7 @@ export default function Fijos() {
                     onChange={(e) => setCategoryId(e.target.value)}>
               <option value="">Sin categoría</option>
               {categories.map((c) => (
-                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>

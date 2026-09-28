@@ -38,16 +38,16 @@ function statement(f: Fixture, closeDate: string, n: number, coupon: string | nu
   return (sqlite.prepare('SELECT transaction_id FROM card_movement_links WHERE statement_id=?').all(record.id) as { transaction_id: string }[]).map(r => r.transaction_id);
 }
 
-test('v4 to v5 only adds metadata tables, preserves transactions, and is repeatable', () => {
+test('v4 to v6 only adds metadata tables, preserves transactions, and is repeatable', () => {
   const db = new Database(':memory:');
   try {
     runMigrations(db);
-    db.exec('DROP TABLE card_event_rules; DROP TABLE event_transactions; DROP TABLE events; PRAGMA user_version=4;');
+    db.exec('DROP TABLE shopping_operations; DROP TABLE shopping_items; DROP TABLE card_event_rules; DROP TABLE event_transactions; DROP TABLE events; PRAGMA user_version=4;');
     db.exec("INSERT INTO households(id,name) VALUES('h','Test'); INSERT INTO accounts(id,household_id,name,type) VALUES('a','h','Cash','efectivo'); INSERT INTO transactions(id,household_id,type,date,account_id,amount_minor) VALUES('t','h','gasto','2026-08-01','a',12345);");
     const before = db.prepare('SELECT * FROM transactions').all();
-    assert.deepEqual(runMigrations(db), { from: 4, to: 5 });
+    assert.deepEqual(runMigrations(db), { from: 4, to: 6 });
     assert.deepEqual(db.prepare('SELECT * FROM transactions').all(), before);
-    assert.deepEqual(runMigrations(db), { from: 5, to: 5 });
+    assert.deepEqual(runMigrations(db), { from: 6, to: 6 });
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
     assert.deepEqual(db.pragma('foreign_key_check'), []);
   } finally { db.close(); }

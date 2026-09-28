@@ -221,6 +221,24 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY(household_id, purchase_key)
   );
   `,
+  // v6: shopping metadata and durable idempotency receipts. No financial writes.
+  `
+  CREATE TABLE shopping_items (
+    household_id TEXT NOT NULL REFERENCES households(id),
+    id TEXT NOT NULL,
+    data_json TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY(household_id, id)
+  );
+  CREATE TABLE shopping_operations (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    household_id TEXT NOT NULL REFERENCES households(id),
+    operation_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    UNIQUE(household_id, operation_id)
+  );
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

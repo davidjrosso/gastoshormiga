@@ -79,7 +79,9 @@ dataRoutes.get('/categories', (c) => {
   const condiciones = [eq(categories.householdId, user.householdId)];
   if (!incluirArchivadas) condiciones.push(eq(categories.archived, false));
 
-  return c.json(db.select().from(categories).where(and(...condiciones)).all());
+  const rows = db.select().from(categories).where(and(...condiciones)).all();
+  rows.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base', numeric: true }));
+  return c.json(rows);
 });
 
 dataRoutes.post('/categories', async (c) => {

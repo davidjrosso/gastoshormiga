@@ -1,3 +1,4 @@
+import CategoryIcon from './CategoryIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../App';
 import { ApiError, api, type Account, type Category } from '../lib/api';
@@ -192,7 +193,7 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
                   }`}
                   style={categoryId === c.id ? { backgroundColor: c.color } : undefined}
                 >
-                  <span className="mr-1">{c.icon}</span>
+                  <span className="mr-1"><CategoryIcon icon={c.icon} name={c.name} color={c.color} /></span>
                   {c.name}
                 </button>
               ))}
