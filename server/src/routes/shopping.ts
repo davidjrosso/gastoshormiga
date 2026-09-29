@@ -2,6 +2,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { requireAuth, type AppEnv } from '../auth.js';
 import { sqlite } from '../db/index.js';
+import { createVeaRoutes } from './vea.js';
+import type { VeaClient } from '../stores/vea.js';
 
 const fields = z.object({
   name: z.string().trim().min(1).max(120),
@@ -28,7 +30,8 @@ function snapshot(householdId: string) {
   }))();
 }
 
-export const shoppingRoutes = new Hono<AppEnv>();
+export function createShoppingRoutes(veaClient?: VeaClient) {
+const shoppingRoutes = new Hono<AppEnv>();
 shoppingRoutes.use('*', async (c, next) => { c.header('Cache-Control', 'no-store'); await next(); });
 shoppingRoutes.use('*', requireAuth);
 shoppingRoutes.use('*', async (c, next) => {
@@ -39,6 +42,7 @@ shoppingRoutes.use('*', async (c, next) => {
   await next();
 });
 shoppingRoutes.get('/', c => c.json(snapshot(c.get('user').householdId)));
+shoppingRoutes.route('/stores/vea', createVeaRoutes(veaClient));
 shoppingRoutes.post('/operations', async c => {
   const parsed = operation.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: 'Revisá los datos del producto' }, 400);
@@ -78,3 +82,7 @@ shoppingRoutes.post('/operations', async c => {
   if (result) return c.json({ error: result.error, snapshot: snapshot(household) }, result.code);
   return c.json(snapshot(household));
 });
+
+return shoppingRoutes;
+}
+export const shoppingRoutes = createShoppingRoutes();

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, RotateCcw, ShoppingCart, WifiOff } from 'lucide-react';
 import ShoppingEditor from '../components/ShoppingEditor';
+import VeaQuote from '../components/VeaQuote';
 import { useShopping } from '../components/ShoppingProvider';
 import { newProduct, patchOperation, productKey, sections, visibleItems, type ShoppingItem, type ShoppingOperation, type ShoppingValues } from '../lib/shopping-model';
 
@@ -14,6 +15,7 @@ export default function Compras() {
   const { cache, ready, online, syncing, error, enqueue, resolve, sync } = useShopping();
   const [editing, setEditing] = useState<ShoppingItem | 'new' | null>(null);
   const [shopping, setShopping] = useState(false);
+  const [quoting, setQuoting] = useState(false);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [undo, setUndo] = useState<ShoppingOperation[] | null>(null);
@@ -89,6 +91,8 @@ export default function Compras() {
     })}
     <div className="flex gap-2"><button className="btn-primary flex-1 !bg-emerald-600" disabled={!ready} onClick={() => setEditing('new')}>+ Agregar productos</button><button className="btn-ghost text-sm" aria-pressed={shopping} onClick={() => setShopping(!shopping)}>{shopping ? 'Salir del modo compra' : 'Estoy en el súper'}</button></div>
     {!ready && <p className="card text-sm">Abriendo lista…</p>}
+    <button className="btn-ghost w-full" disabled={!ready || !online || !pending.length || !!cache.queue.length || !!error} onClick={() => setQuoting(true)}>Cotizar en VEA</button>
+    {quoting && <VeaQuote items={pending} onClose={() => setQuoting(false)} />}
     {ready && !active.length && <div className="card py-8 text-center"><ShoppingCart className="mx-auto mb-3 text-emerald-600" size={36} /><p className="font-semibold">¿Qué hace falta en casa?</p><p className="mt-1 text-sm text-ink-mute dark:text-slate-400">Agregá productos y compartí la lista con tu hogar.</p></div>}
     {[...new Set([...sections, ...pending.map(p => p.section)])].map(section => {
       const group = pending.filter(p => p.section === section).sort((a,b) => Number(b.urgent) - Number(a.urgent) || a.createdAt - b.createdAt);

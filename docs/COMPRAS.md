@@ -1,4 +1,4 @@
-# Compras — v0.5.2
+# Compras — v0.6.0
 
 Lista compartida por hogar. Compras reemplaza Ahorros en la barra inferior;
 Ahorros conserva su ruta y datos, con acceso desde Ajustes. El carrito verde
@@ -19,7 +19,7 @@ sobre el boton de carga de gastos abre la carga rapida.
 
 Marcar, desmarcar, repetir e historial NO crean gastos, precios, transacciones
 ni movimientos de tarjeta. Los importes se registran por separado.
-Presupuestos, integracion contable, precios externos, recordatorios y geofencing
+Presupuestos, integracion contable, historial/comparacion de precios, recordatorios y geofencing
 quedan fuera de esta entrega.
 
 ## Sin conexion y concurrencia
@@ -81,4 +81,10 @@ resolucion, historial/repetir, frecuentes y duplicados. Vista de ancho movil.
 No se usaron ni modificaron datos productivos.
 
 Categorias ordenadas alfabeticamente en espanol (sin distinguir mayusculas o
-acentos) en administracion y selectores. En Resumen, "En que se fue" va por monto de mayor a menor. Version 0.5.2.
+acentos) en administracion y selectores. En Resumen, "En que se fue" va por monto de mayor a menor. Version 0.6.0.
+
+## Cotizacion VEA (0.6.0)
+
+Cotizacion temporal y carrito disponibles con conexion. Ver [VEA.md](VEA.md).
+Esquema actual v7: agrega preferencias y vinculos por hogar; no modifica
+las tablas de Compras de v6. Binarios hasta 0.5.2 no aceptan bases v7.

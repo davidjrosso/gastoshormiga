@@ -239,6 +239,22 @@ const MIGRATIONS: string[] = [
     UNIQUE(household_id, operation_id)
   );
   `,
+  // v7: store preferences and reusable product links; no shopping/financial writes.
+  `
+  CREATE TABLE store_settings (
+    household_id TEXT NOT NULL REFERENCES households(id),
+    store TEXT NOT NULL, sales_channel TEXT NOT NULL, seller_id TEXT NOT NULL,
+    label TEXT NOT NULL, updated_at INTEGER NOT NULL,
+    PRIMARY KEY(household_id, store)
+  );
+  CREATE TABLE store_product_links (
+    household_id TEXT NOT NULL REFERENCES households(id), store TEXT NOT NULL,
+    item_key TEXT NOT NULL, sku TEXT NOT NULL, ean TEXT NOT NULL,
+    product_name TEXT NOT NULL, pack_qty INTEGER NOT NULL DEFAULT 1 CHECK(pack_qty BETWEEN 1 AND 99),
+    updated_by TEXT NOT NULL REFERENCES users(id), updated_at INTEGER NOT NULL,
+    PRIMARY KEY(household_id, store, item_key)
+  );
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

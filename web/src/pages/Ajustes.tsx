@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../App';
 import { api } from '../lib/api';
 import { forgetOfflineProfile } from '../lib/offline-session';
+import VeaSettings from '../components/VeaSettings';
 
 export default function Ajustes() {
   const { me } = useAuth();
@@ -35,6 +36,7 @@ export default function Ajustes() {
       <header className="px-1 pt-2">
         <h1 className="text-lg font-bold">Ajustes</h1>
       </header>
+      <VeaSettings />
 
       <div className="card">
         <p className="label">Hogar</p>
