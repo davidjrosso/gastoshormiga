@@ -17,6 +17,8 @@ export function createMlRoutes(accounts = new MlAccounts(new MlClient())) {
   const client = accounts.client;
   routes.onError(mlErrors);
   routes.get('/status', c => c.json(accounts.status(c.get('user').householdId)));
+  routes.use('/connect', storeLimiter('la conexión con Mercado Libre', 10, 1));
+  routes.use('/complete', storeLimiter('la conexión con Mercado Libre', 10, 1));
   routes.post('/connect', c => {
     if (!accounts.configured) return c.json({ error: 'Mercado Libre no está configurado en el servidor.' }, 503);
     const user = c.get('user');
@@ -44,7 +46,7 @@ export function createMlRoutes(accounts = new MlAccounts(new MlClient())) {
     const products = (await client.searchCatalog(term.data, token)).slice(0, 6);
     const withOffers = await Promise.all(products.map(async p => {
       const offer = bestFullOffer(await client.offers(p.productId, token));
-      const shipping = offer ? await client.shipping(offer.itemId, token, household) : null;
+      const shipping = offer && !offer.freeShipping ? await client.shipping(offer.itemId, token, household) : null;
       return { ...p, offer: offer && { itemId: offer.itemId, unitMinor: offer.unitMinor, freeShipping: offer.freeShipping, shippingMinor: offer.freeShipping ? 0 : shipping?.costMinor ?? null, eta: shipping?.eta ?? null },
         reason: offer ? null : 'Sin ofertas Full para este producto.' };
     }));

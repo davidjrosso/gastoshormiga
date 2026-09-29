@@ -89,7 +89,7 @@ Cotizacion temporal y carrito disponibles con conexion. Ver [VEA.md](VEA.md).
 Esquema actual v7: agrega preferencias y vinculos por hogar; no modifica
 las tablas de Compras de v6. Binarios hasta 0.5.2 no aceptan bases v7.
 
-## Comparar VEA / Mercado Libre (0.7.0)
+## Comparar VEA / Mercado Libre (0.7.1)
 
 Compara pendientes entre VEA Río Tercero (retiro) y ofertas Full de Mercado Libre,
 con resúmenes Todo VEA, Todo ML y Mixto, y abre los carritos. Requiere conectar

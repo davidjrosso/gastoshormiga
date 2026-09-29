@@ -14,6 +14,8 @@ const ctx = (household: string, kind: string) => `ml:${household}:${kind}`;
  * solo se consultan catálogo, ofertas y costos de envío, nunca datos de la cuenta.
  */
 export class MlAccounts {
+  private generations = new Map<string, number>();
+  private invalidate(household: string) { this.generations.set(household, (this.generations.get(household) ?? 0) + 1); }
   private refreshing = new Map<string, Promise<string>>();
   constructor(readonly client: MlClient, private key: Buffer | null = loadKey()) {}
   get configured(): boolean { return !!this.client.config && !!this.key; }
@@ -29,8 +31,9 @@ export class MlAccounts {
     const key = this.requireKey();
     const { verifier, challenge, state } = newPkce();
     const now = Date.now();
+    this.invalidate(household);
     sqlite.transaction(() => {
-      sqlite.prepare('DELETE FROM store_oauth_pending WHERE created_at < ? OR (household_id=? AND user_id=?)').run(now - PENDING_TTL, household, userId);
+      sqlite.prepare("DELETE FROM store_oauth_pending WHERE store='ml' AND (created_at < ? OR household_id=?)").run(now - PENDING_TTL, household);
       sqlite.prepare('INSERT INTO store_oauth_pending VALUES(?,?,?,?,?,?)').run(state, 'ml', household, userId, seal(verifier, key, `ml:${state}:verifier`), now);
     })();
     return authUrl(this.client.config!, state, challenge);
@@ -40,6 +43,7 @@ export class MlAccounts {
     const key = this.requireKey();
     const pending = sqlite.transaction(() => {
       const row = sqlite.prepare("SELECT * FROM store_oauth_pending WHERE state=? AND store='ml'").get(state) as PendingRow | undefined;
+      if (row && expected && (row.household_id !== expected.household || row.user_id !== expected.user)) throw new MlAuthError('Esta autorización la inició otra sesión.');
       if (row) sqlite.prepare('DELETE FROM store_oauth_pending WHERE state=?').run(state);
       return row;
     }).immediate();
@@ -47,7 +51,9 @@ export class MlAccounts {
     if (expected && (pending.household_id !== expected.household || pending.user_id !== expected.user)) throw new MlAuthError('Esta autorización la inició otra sesión. Volvé a conectar desde acá.');
     let verifier: string;
     try { verifier = open(pending.code_verifier_enc, key, `ml:${state}:verifier`); } catch { throw new MlAuthError('No se pudo validar la autorización. Volvé a conectar.'); }
+    const generation = this.generations.get(pending.household_id) ?? 0;
     const tokens = await this.client.exchangeCode(code, verifier);
+    if (generation !== (this.generations.get(pending.household_id) ?? 0)) throw new MlAuthError('La conexión se canceló o fue reemplazada. Volvé a conectar.');
     this.save(pending.household_id, pending.user_id, tokens);
     return { household: pending.household_id };
   }
@@ -59,6 +65,8 @@ export class MlAccounts {
       .run(household, 'ml', userId, t.externalUserId, seal(t.accessToken, key, ctx(household, 'access')), seal(t.refreshToken, key, ctx(household, 'refresh')), t.expiresAt, t.scope, Date.now());
   }
   disconnect(household: string) {
+    this.invalidate(household);
+    sqlite.prepare("DELETE FROM store_oauth_pending WHERE household_id=? AND store='ml'").run(household);
     sqlite.prepare("DELETE FROM store_accounts WHERE household_id=? AND store='ml'").run(household);
     this.refreshing.delete(household);
   }
@@ -71,15 +79,17 @@ export class MlAccounts {
       if (row.expires_at - REFRESH_MARGIN > Date.now()) return open(row.access_token_enc, key, ctx(household, 'access'));
       const running = this.refreshing.get(household);
       if (running) return await running;
+      const unchanged = () => (sqlite.prepare("SELECT refresh_token_enc FROM store_accounts WHERE household_id=? AND store='ml'").get(household) as { refresh_token_enc: string } | undefined)?.refresh_token_enc === row.refresh_token_enc;
       const refresh = (async () => {
         let tokens: MlTokens;
         try { tokens = await this.client.refresh(open(row.refresh_token_enc, key, ctx(household, 'refresh'))); }
-        catch (e) { if (e instanceof MlAuthError) this.disconnect(household); throw e; }
+        catch (e) { if (e instanceof MlAuthError && unchanged()) this.disconnect(household); throw e; }
+        if (!unchanged()) throw new MlAuthError('La conexión cambió durante la consulta. Volvé a consultar.');
         this.save(household, row.user_id, tokens);
         return tokens.accessToken;
       })();
       this.refreshing.set(household, refresh);
-      try { return await refresh; } finally { this.refreshing.delete(household); }
+      try { return await refresh; } finally { if (this.refreshing.get(household) === refresh) this.refreshing.delete(household); }
     } catch (e) {
       if (e instanceof SecretBoxError) { this.disconnect(household); throw new MlAuthError('La conexión guardada no es válida en este servidor. Volvé a conectar Mercado Libre.'); }
       throw e;

@@ -12,8 +12,7 @@ import { z } from 'zod';
  * - El carrito se arma con /gz/checkout/cart/buy, enlace NO documentado por ML: si deja
  *   de funcionar, la comparación sigue siendo útil y el usuario arma el carrito a mano.
  *
- * Solo se consideran ofertas Full (logistic_type=fulfillment) y nuevas: la decisión de
- * David es que todo lo de ML llegue junto, en un mismo envío.
+ * Solo se consideran ofertas Full nuevas. El checkout confirma stock, envío y paquetes.
  */
 export const ML_SITE = 'MLA';
 export const ML_API = 'https://api.mercadolibre.com';
@@ -83,19 +82,19 @@ export function parseProduct(data: unknown): MlProduct {
   return { productId: p.id, productName: p.name, gtin: /^\d{8,14}$/.test(gtin) ? gtin : '' };
 }
 
-export interface MlOffer { itemId: string; unitMinor: number; sellerId: string; full: boolean; freeShipping: boolean }
+export interface MlOffer { itemId: string; unitMinor: number; sellerId: string; full: boolean; freeShipping: boolean; availableQty: number | null }
 const offersSchema = z.object({ results: z.array(z.object({
-  item_id: z.string(), price: z.number(), currency_id: z.string(), seller_id: z.number().int(), condition: z.string().optional(),
+  item_id: z.string(), price: z.number(), currency_id: z.string(), seller_id: z.number().int(), condition: z.string().optional(), status: z.string().optional(), available_quantity: z.number().int().nonnegative().optional(),
   shipping: z.object({ logistic_type: z.string().nullable().optional(), free_shipping: z.boolean().optional() }).passthrough().optional(),
 }).passthrough()).default([]) });
 export function parseOffers(data: unknown): MlOffer[] {
   return offersSchema.parse(data).results
-    .filter(o => itemId.safeParse(o.item_id).success && o.currency_id === 'ARS' && (o.condition ?? 'new') === 'new')
-    .map(o => ({ itemId: o.item_id, unitMinor: toMinor(o.price), sellerId: String(o.seller_id), full: o.shipping?.logistic_type === 'fulfillment', freeShipping: !!o.shipping?.free_shipping }));
+    .filter(o => itemId.safeParse(o.item_id).success && o.currency_id === 'ARS' && o.condition === 'new' && (!o.status || o.status === 'active') && o.available_quantity !== 0)
+    .map(o => ({ itemId: o.item_id, unitMinor: toMinor(o.price), sellerId: String(o.seller_id), full: o.shipping?.logistic_type === 'fulfillment', freeShipping: !!o.shipping?.free_shipping, availableQty: o.available_quantity ?? null }));
 }
-/** Solo Full: todo llega junto. Entre las Full, la más barata. */
-export function bestFullOffer(offers: MlOffer[]): MlOffer | null {
-  return offers.filter(o => o.full).sort((a, b) => a.unitMinor - b.unitMinor || a.itemId.localeCompare(b.itemId))[0] ?? null;
+/** Menor precio entre las ofertas Full recibidas; el catálogo puede tener más páginas. */
+export function bestFullOffer(offers: MlOffer[], qty = 1): MlOffer | null {
+  return offers.filter(o => o.full && (o.availableQty === null || o.availableQty >= qty)).sort((a, b) => a.unitMinor - b.unitMinor || a.itemId.localeCompare(b.itemId))[0] ?? null;
 }
 
 export interface MlShipping { costMinor: number; listMinor: number | null; eta: string | null }
@@ -139,11 +138,11 @@ export class MlClient {
     if (!this.config) throw new MlError('Mercado Libre no está configurado en el servidor.');
     return this.config;
   }
-  private async call(path: string, init: { token?: string; form?: Record<string, string> } = {}): Promise<{ status: number; body: unknown }> {
+  private async call(path: string, init: { token?: string; form?: Record<string, string>; signal?: AbortSignal } = {}): Promise<{ status: number; body: unknown }> {
     let response: Response;
     try {
       response = await this.transport(`${ML_API}${path}`, {
-        method: init.form ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(this.timeoutMs),
+        method: init.form ? 'POST' : 'GET', redirect: 'error', signal: init.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(this.timeoutMs)]) : AbortSignal.timeout(this.timeoutMs),
         headers: { Accept: 'application/json', ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}), ...(init.form ? { 'Content-Type': 'application/x-www-form-urlencoded' } : {}) },
         body: init.form ? new URLSearchParams(init.form).toString() : undefined,
       });
@@ -151,8 +150,8 @@ export class MlClient {
     const body = await response.json().catch(() => null);
     return { status: response.status, body };
   }
-  private async get(path: string, token: string, allow404 = false): Promise<unknown> {
-    const { status, body } = await this.call(path, { token });
+  private async get(path: string, token: string, allow404 = false, signal?: AbortSignal): Promise<unknown> {
+    const { status, body } = await this.call(path, { token, signal });
     if (status === 401) throw new MlAuthError('La conexión con Mercado Libre venció. Volvé a conectarla en Ajustes.');
     if (allow404 && status === 404) return null;
     if (status !== 200) throw new MlError('Mercado Libre rechazó la consulta. Probá más tarde.');
@@ -183,12 +182,17 @@ export class MlClient {
       try { return parseProduct(data); } catch { throw new MlError('No se pudo verificar el producto en Mercado Libre.'); }
     });
   }
-  offers(id: string, token: string): Promise<MlOffer[]> {
-    if (!productId.safeParse(id).success) return Promise.resolve([]);
-    return this.cached(`offers:${id}`, 120_000, async () => {
-      const data = await this.get(`/products/${id}/items?limit=20`, token, true);
-      if (data === null) return [];
-      try { return parseOffers(data); } catch { throw new MlError('No se pudieron leer las ofertas de Mercado Libre.'); }
+  async offers(id: string, token: string): Promise<MlOffer[]> {
+    return (await this.offerSnapshot(id, token)).offers;
+  }
+  offerSnapshot(id: string, token: string, signal?: AbortSignal): Promise<{ offers: MlOffer[]; quotedAt: number; expiresAt: number }> {
+    if (!productId.safeParse(id).success) throw new MlError('Producto inválido.');
+    const scope = createHash('sha256').update(token).digest('hex');
+    return this.cached(`offers:${scope}:${id}`, 120_000, async () => {
+      const quotedAt = Date.now();
+      const data = await this.get(`/products/${id}/items?limit=20`, token, true, signal);
+      try { return { offers: data === null ? [] : parseOffers(data), quotedAt, expiresAt: quotedAt + 120_000 }; }
+      catch { throw new MlError('No se pudieron leer las ofertas de Mercado Libre.'); }
     });
   }
   /** `scope` separa la caché por hogar: con Meli+ el costo puede depender de la cuenta. */

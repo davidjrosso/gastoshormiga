@@ -13,9 +13,9 @@ export interface Comparison {
     choices: Record<string, 'vea' | 'ml' | null>;
     vea: { productsMinor: number; totalMinor: number; missing: number };
     ml: { productsMinor: number; shippingMinor: number | null; totalMinor: number | null; missing: number };
-    mixed: { productsMinor: number; shippingMinor: number | null; totalMinor: number | null; veaCount: number; mlCount: number; missing: number; savingsMinor: number; shippingExceedsSavings: boolean };
+    mixed: { productsMinor: number | null; shippingMinor: number | null; totalMinor: number | null; veaCount: number; mlCount: number; missing: number };
   };
-  quotedAt: number; expiresAt: number; veaError: string | null; mlError: string | null; mlReconnect: boolean;
+  quotedAt: number; expiresAt: number; mixedError: string | null; veaError: string | null; mlError: string | null; mlReconnect: boolean;
   carts: { vea: string | null; ml: string | null; mixedVea: string | null; mixedMl: string | null };
 }
 

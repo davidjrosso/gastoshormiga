@@ -47,7 +47,7 @@ export default function MlSettings() {
       : <><p className="text-xs text-ink-mute dark:text-slate-400">Conectá tu cuenta para comparar la lista con ofertas Full. Vas a iniciar sesión en Mercado Libre, no en Hormiga.</p>
         <button className="btn-primary text-sm" disabled={busy} onClick={() => void connect()}>{busy ? 'Abriendo…' : 'Conectar Mercado Libre'}</button>
         {waiting && <div className="space-y-2 rounded-xl bg-slate-50 p-3 text-sm dark:bg-slate-800">
-          <p>Autorizá en la pestaña de Mercado Libre. Si al volver el navegador muestra un aviso o un error, copiá la dirección completa de esa pestaña y pegala acá:</p>
+          <p>Autorizá en la pestaña de Mercado Libre. Si la conexión no se actualiza, tocá “Ya volví conectado”. No continúes si aparece un aviso de seguridad del certificado. Para una recuperación con HTTPS válido, podés pegar la dirección de vuelta:</p>
           <input className="input w-full" aria-label="Dirección de vuelta de Mercado Libre" inputMode="url" autoComplete="off" value={pasted} onChange={e => setPasted(e.target.value)} placeholder="https://…/hormiga/api/ml/callback?code=…" />
           <div className="flex gap-2"><button className="btn-primary text-sm" disabled={busy || pasted.trim().length < 10} onClick={() => void complete()}>Terminar conexión</button><button className="btn-ghost text-sm" disabled={busy} onClick={() => void load().then(() => setWaiting(false))}>Ya volví conectado</button></div>
         </div>}</>}

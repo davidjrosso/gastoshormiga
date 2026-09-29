@@ -1,26 +1,28 @@
-# Hormiga 0.7.0: comparar VEA y Mercado Libre
+# Hormiga 0.7.1: preparación de comparación VEA / Mercado Libre
 
-Implementación solicitada por David el 29/09/2026 (rama feat/comparar-ml).
-Desde Compras, “Comparar VEA / ML” cotiza pendientes en VEA Río Tercero (retiro,
-costo $0) y en Mercado Libre solo con ofertas Full, para un único envío. Muestra
-Todo VEA, Todo ML (envío orientativo de un paquete) y Mixto, y abre los carritos.
-Ajustes permite conectar la cuenta de ML (OAuth PKCE) por callback o pegando la URL.
+Base: feat/comparar-ml d462e88 (0.7.0). Correcciones en codex/revision-comparar-ml.
+David confirmó que la aplicación de ML ya está creada. Callback existente sslip.io identificado. Configuración privada preparada localmente;
+pendientes transferencia autorizada y certificado TLS válido para ese hostname. No se desplegó esta versión.
 
-Sin efectos sobre gastos, precios históricos ni shopping_items. La cotización es
-efímera (2 minutos). “En qué se fue” sigue por monto descendente; selectores alfabéticos.
+Comparación: VEA conserva descuentos y recotiza el subconjunto mixto. La caché mantiene
+su fecha de vencimiento original. ML conserva resultados parciales, limita concurrencia
+y plazo, valida cantidades agregadas e informa envío/stock final a confirmar en checkout.
+La selección por subtotal no garantiza equivalencia de presentaciones ni ahorro final.
 
-0.7.0 en server/web y lockfiles; migración aditiva v8: store_accounts y
-store_oauth_pending. Sin dependencias nuevas. Binarios <=0.6.0 rechazan v8.
-Tokens cifrados AES-256-GCM con HORMIGA_TOKEN_KEY. Variables, API y límites: docs/ML.md.
-El cotizador VEA 0.6.0 se refactorizó para compartir la carga de pendientes; mismas pruebas.
+OAuth: desconectar cancela estados pendientes/en curso. Refresh atrasado no recrea ni
+reemplaza una cuenta nueva. Tokens cifrados con AES-256-GCM. Requiere callback HTTPS válido.
+Detalles técnicos, configuración, API y límites: docs/ML.md y server/.env.example.
 
-Pruebas server (incluye 12 nuevas de ML/comparación, sin red), 4 cliente,
-typecheck y builds APP_BASE=hormiga correctos. Endpoints ML verificados con la cuenta
-de David antes de programar; el carrito ML usa un enlace no documentado por ML.
-Pendiente: QA en producción (conectar, comparar, abrir carritos en PC y Android).
+Server/web/lockfiles0.7.1; esquema aditivo v8. No cambia tablas financieras ni shopping_items.
+Comprado solo tacha; “En qué se fue” conserva monto descendente y selectores A-Z.
+Sin dependencias nuevas. Producción según último registro:0.6.0 /2cfd1f8 /esquema7.
 
-NO desplegado. Estado previo conocido: 0.6.0 / 2cfd1f8 / esquema v7.
-Antes de desplegar: autorización, estado real/commit, backup consistente y checksum,
-migración en copia, builds Linux, código/assets previos, variables ML y clave de tokens
-en el entorno. Reiniciar solo Hormiga, comprobar Ticketera y registrar evidencia privada.
-Nunca reemplazar PROD por DEV.
+Pruebas de regresión cubren OAuth concurrente, totales/promociones, centavos agrupados,
+caché, cantidades repetidas, aislamiento y fallos parciales, sin credenciales ni red real.
+Antes de desplegar repetir checks Linux y migración sobre copia consistente de PROD.
+Falta QA OAuth y checkout real en PC/Android. No confirmar compras durante QA.
+Seguir autorización y procedimiento privado, reiniciar solo Hormiga y comprobar Ticketera.
+
+Validación local final (29/09/2026): 133 pruebas server +4 web, typecheck server,
+builds server/web (APP_BASE=hormiga) y git diff --check correctos. No hubo consultas
+nuevas a ML con credenciales reales ni modificaciones en producción en esta preparación.

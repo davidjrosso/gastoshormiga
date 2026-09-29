@@ -10,7 +10,7 @@ import { productKey } from '../src/routes/store-rows.js';
 import { summarize, type CompareRow } from '../src/routes/compare.js';
 import { runMigrations } from '../src/db/migrate.js';
 import { loadKey, open, seal, SecretBoxError } from '../src/lib/secret-box.js';
-import { bestFullOffer, cartUrl, loadMlConfig, MlClient, MlError, parseOffers, parseReturnUrl, parseShipping, toMinor, type MlConfig } from '../src/stores/ml.js';
+import { bestFullOffer, cartUrl, loadMlConfig, MlClient, MlError, parseOffers, parseReturnUrl, parseShipping, toMinor, type MlConfig, type MlTokens } from '../src/stores/ml.js';
 import { MlAccounts } from '../src/stores/ml-account.js';
 import { VeaClient, VEA_SETTINGS } from '../src/stores/vea.js';
 
@@ -58,8 +58,8 @@ const veaTransport: typeof fetch = async (_url, init) => {
 };
 const newAccounts = () => new MlAccounts(new MlClient(config, mlTransport), key);
 const headers = (f: Fixture) => ({ cookie: `hormiga_session=${makeSession(f.userId)}`, 'Content-Type': 'application/json', 'X-Hormiga-Household': f.householdId, 'X-Hormiga-User': f.userId });
-function createApp(accounts = newAccounts()) {
-  return { app: new Hono().route('/shopping', createShoppingRoutes(new VeaClient(veaTransport), accounts)).route('/api/ml', createMlCallbackRoutes(accounts)), accounts };
+function createApp(accounts = newAccounts(), vea = new VeaClient(veaTransport)) {
+  return { app: new Hono().route('/shopping', createShoppingRoutes(vea, accounts)).route('/api/ml', createMlCallbackRoutes(accounts)), accounts };
 }
 // Test responses are asserted field by field; untyped JSON keeps them readable.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -139,7 +139,8 @@ test('OAuth: state is single use, bound to the starting session and tokens are s
   const state = await connect(app, f);
   const back = `${config.redirectUri}?code=TG-ok&state=${state}`;
   assert.equal((await call(app, other, '/stores/ml/complete', 'POST', { url: back })).status, 401, 'another household cannot use the state');
-  // The failed attempt consumed the state: start again.
+  assert.ok(sqlite.prepare('SELECT 1 FROM store_oauth_pending WHERE state=?').get(state), 'foreign session cannot consume state');
+  // Starting a new connection replaces the pending authorization.
   const state2 = await connect(app, f);
   const done = await call(app, f, '/stores/ml/complete', 'POST', { url: `${config.redirectUri}?code=TG-ok&state=${state2}` });
   assert.equal(done.status, 200);
@@ -214,7 +215,7 @@ test('search returns catalog products with their cheapest Full offer; links are 
   assert.equal((await call(app, f, `/stores/ml/links/${key}`, 'PUT', { itemId: item, productId: 'MLA1&x' })).status, 400);
 });
 
-test('compare: VEA pickup vs ML Full only, one ML shipment, mixed choice, carts and no financial writes', async () => {
+test('compare: VEA pickup vs ML Full only, unknown combined shipping, mixed choice, carts and no financial writes', async () => {
   const f = makeHousehold();
   const { app } = createApp();
   await call(app, f, '/stores/ml/complete', 'POST', { url: `${config.redirectUri}?code=TG-ok&state=${await connect(app, f)}` });
@@ -233,10 +234,9 @@ test('compare: VEA pickup vs ML Full only, one ML shipment, mixed choice, carts 
   assert.equal(row(nada).vea, null); assert.equal(row(nada).ml, null);
   const s = data.summary;
   assert.deepEqual(s.vea, { productsMinor: 1700000, totalMinor: 1700000, missing: 2 });
-  assert.deepEqual(s.ml, { productsMinor: 1680860, shippingMinor: 649900, totalMinor: 2330760, missing: 2 }, 'one Full package: the highest informed cost');
+  assert.deepEqual(s.ml, { productsMinor: 1680860, shippingMinor: null, totalMinor: null, missing: 2 }, 'combined shipping is not inferred from individual offers');
   assert.deepEqual(s.choices, { [yerba]: 'ml', [aceite]: 'vea', [leche]: null, [nada]: null });
-  assert.equal(s.mixed.productsMinor, 910860 + 700000); assert.equal(s.mixed.shippingMinor, 499900);
-  assert.equal(s.mixed.savingsMinor, 89140); assert.equal(s.mixed.shippingExceedsSavings, true);
+  assert.equal(s.mixed.productsMinor, 910860 + 700000); assert.equal(s.mixed.shippingMinor, null);
   assert.equal(new URL(data.carts.mixedVea).searchParams.getAll('sku').join(), '222');
   assert.equal(data.carts.mixedMl, 'https://www.mercadolibre.com.ar/gz/checkout/cart/buy?site_id=MLA&items=MLA9001-Q2');
   assert.equal(data.carts.ml, 'https://www.mercadolibre.com.ar/gz/checkout/cart/buy?site_id=MLA&items=MLA9001-Q2,MLA9003-Q1');
@@ -262,8 +262,176 @@ test('summary: free Full shipping, unknown shipping and ties favour VEA', () => 
     vea: v === null ? null : { productName: id, available: true, unitMinor: v, subtotalMinor: v, reason: null },
     ml: m === null ? null : { productId: 'MLA1', productName: id, itemId: 'MLA2', unitMinor: m, subtotalMinor: m, qty: 1, shippingMinor: ship, freeShipping: free, eta: null, reason: null } });
   const free = summarize([r('a', 1000, 800, 0, true), r('b', 500, 500, 300)]);
-  assert.equal(free.choices.b, 'vea', 'tie goes to VEA pickup'); assert.equal(free.mixed.shippingMinor, 0); assert.equal(free.mixed.shippingExceedsSavings, false);
-  assert.equal(free.ml.shippingMinor, 300);
+  assert.equal(free.choices.b, 'vea', 'tie goes to VEA pickup'); assert.equal(free.mixed.shippingMinor, null);
+  assert.equal(free.ml.shippingMinor, null);
   const unknown = summarize([r('a', null, 800, null)]);
-  assert.equal(unknown.ml.shippingMinor, null); assert.equal(unknown.ml.totalMinor, null); assert.equal(unknown.mixed.shippingExceedsSavings, false);
+  assert.equal(unknown.ml.shippingMinor, null); assert.equal(unknown.ml.totalMinor, null);
+});
+
+function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: unknown) => void; const promise = new Promise<T>((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
+const freshTokens = (id = '1'): MlTokens => ({ accessToken: `access-token-${id}`, refreshToken: `refresh-token-${id}`, externalUserId: id, scope: 'read', expiresAt: Date.now() + 3_600_000 });
+async function connected() {
+  const f = makeHousehold(); const { app, accounts } = createApp();
+  const state = await connect(app, f);
+  await accounts.complete(state, 'good');
+  return { f, app, accounts };
+}
+
+test('disconnect invalidates in-flight refresh and pending or in-flight OAuth', async () => {
+  const { f, accounts } = await connected();
+  sqlite.prepare('UPDATE store_accounts SET expires_at=0 WHERE household_id=?').run(f.householdId);
+  const refresh = deferred<MlTokens>(); accounts.client.refresh = () => refresh.promise;
+  const running = accounts.accessToken(f.householdId);
+  accounts.disconnect(f.householdId); refresh.resolve(freshTokens());
+  await assert.rejects(running, /cambió/);
+  assert.equal(accounts.status(f.householdId).connected, false);
+  let state = new URL(accounts.startConnect(f.householdId, f.userId)).searchParams.get('state')!;
+  accounts.disconnect(f.householdId);
+  await assert.rejects(accounts.complete(state, 'good'), /venció/);
+  state = new URL(accounts.startConnect(f.householdId, f.userId)).searchParams.get('state')!;
+  const exchange = deferred<MlTokens>(); accounts.client.exchangeCode = () => exchange.promise;
+  const completing = accounts.complete(state, 'good');
+  accounts.disconnect(f.householdId); exchange.resolve(freshTokens());
+  await assert.rejects(completing, /canceló/);
+  assert.equal(accounts.status(f.householdId).connected, false);
+});
+
+test('late refresh success or rejection cannot replace or disconnect a newly connected account', async () => {
+  for (const failure of [false, true]) {
+    const { f, accounts } = await connected();
+    sqlite.prepare('UPDATE store_accounts SET expires_at=0 WHERE household_id=?').run(f.householdId);
+    const refresh = deferred<MlTokens>(); accounts.client.refresh = () => refresh.promise;
+    const running = accounts.accessToken(f.householdId);
+    const rejected = assert.rejects(running);
+    accounts.disconnect(f.householdId);
+    const state = new URL(accounts.startConnect(f.householdId, f.userId)).searchParams.get('state')!;
+    accounts.client.exchangeCode = async () => freshTokens('new');
+    await accounts.complete(state, 'good');
+    if (failure) { const { MlAuthError } = await import('../src/stores/ml.js'); refresh.reject(new MlAuthError('old token')); }
+    else refresh.resolve(freshTokens('old'));
+    await rejected;
+    assert.equal(await accounts.accessToken(f.householdId), 'access-token-new');
+  }
+});
+
+test('comparison preserves promotional totals, exact repeated-SKU cents, and cached expiration', async t => {
+  let now = Date.now(); t.mock.method(Date, 'now', () => now);
+  const f = makeHousehold();
+  const vea = new VeaClient(async (_input, init) => {
+    const body = JSON.parse(String(init!.body));
+    return Response.json({ items: body.items.map((i: { id: string; quantity: number }, index: number) => ({ id: i.id, requestIndex: index, quantity: i.quantity, seller, availability: 'available', sellingPrice: 10000, priceDefinition: { total: 15001 }, measurementUnit: 'un', unitMultiplier: 1 })),
+      logisticsInfo: body.items.map((_: unknown, itemIndex: number) => ({ itemIndex, slas: [{ id: 'Retiro en Tienda - Vea Río Tercero Modesto Acuña 58' }] })) });
+  });
+  const { app } = createApp(newAccounts(), vea);
+  const a = addItem(f, 'A'), b = addItem(f, 'B'); link(f, 'vea', 'A', '111'); link(f, 'vea', 'B', '111');
+  const body = { items: [{ itemId: a, qty: 1 }, { itemId: b, qty: 1 }] };
+  const first = await (await call(app, f, '/compare', 'POST', body)).json() as Json;
+  assert.equal(first.summary.vea.totalMinor, 15001);
+  assert.equal(first.rows.reduce((n: number, r: Json) => n + r.vea.subtotalMinor, 0), 15001);
+  assert.deepEqual(new URL(first.carts.vea).searchParams.getAll('qty'), ['2']);
+  now += 110_000;
+  const second = await (await call(app, f, '/compare', 'POST', body)).json() as Json;
+  assert.equal(second.expiresAt, first.expiresAt); assert.equal(second.expiresAt - now, 10_000);
+});
+
+test('mixed VEA is simulated again and does not reuse a discount from the complete basket', async () => {
+  const { f, accounts } = await connected();
+  const vea = new VeaClient(async (_input, init) => {
+    const body = JSON.parse(String(init!.body));
+    return Response.json({ items: body.items.map((i: { id: string; quantity: number }, index: number) => ({ id: i.id, requestIndex: index, quantity: i.quantity, seller, availability: 'available', sellingPrice: 600000, priceDefinition: { total: body.items.length > 1 ? 600000 : 900000 }, measurementUnit: 'un', unitMultiplier: 1 })),
+      logisticsInfo: body.items.map((_: unknown, itemIndex: number) => ({ itemIndex, slas: [{ id: 'Retiro en Tienda - Vea Río Tercero Modesto Acuña 58' }] })) });
+  });
+  const { app } = createApp(accounts, vea);
+  const a = addItem(f, 'A'), b = addItem(f, 'B'); link(f, 'vea', 'A', '111'); link(f, 'vea', 'B', '222'); link(f, 'ml', 'A', 'MLA100');
+  const data = await (await call(app, f, '/compare', 'POST', { items: [{ itemId: a, qty: 1 }, { itemId: b, qty: 1 }] })).json() as Json;
+  assert.equal(data.summary.vea.totalMinor, 1200000);
+  assert.equal(data.summary.mixed.productsMinor, 900000 + 455430);
+});
+
+test('ML grouped quantities above limit retain VEA, valid carts and a clear row error', async () => {
+  const { f, app } = await connected();
+  const a = addItem(f, 'A'), b = addItem(f, 'B'); link(f, 'ml', 'A', 'MLA100'); link(f, 'ml', 'B', 'MLA100'); link(f, 'vea', 'A', '111');
+  const res = await call(app, f, '/compare', 'POST', { items: [{ itemId: a, qty: 60 }, { itemId: b, qty: 40 }] });
+  assert.equal(res.status, 200); const data = await res.json() as Json;
+  assert.equal(data.carts.ml, null); assert.ok(data.carts.vea);
+  assert.ok(data.rows.every((r: Json) => r.ml.subtotalMinor === null && /99/.test(r.ml.reason)));
+});
+
+test('ML offer cache preserves timestamps and isolates account tokens; stock/condition filters fail closed', async t => {
+  let now = Date.now(); t.mock.method(Date, 'now', () => now); let calls = 0;
+  const client = new MlClient(config, async () => { calls++; return Response.json(offersFixture.MLA100); });
+  const first = await client.offerSnapshot('MLA100', 'token-one'); now += 110000;
+  const second = await client.offerSnapshot('MLA100', 'token-one');
+  assert.equal(calls, 1); assert.equal(second.expiresAt, first.expiresAt);
+  await client.offerSnapshot('MLA100', 'token-two'); assert.equal(calls, 2);
+  const base = { item_id: 'MLA1', price: 1, currency_id: 'ARS', seller_id: 1, condition: 'new', shipping: { logistic_type: 'fulfillment' } };
+  assert.equal(parseOffers({ results: [{ ...base, available_quantity: 0 }, { ...base, status: 'paused' }, { ...base, condition: undefined }] }).length, 0);
+  assert.equal(bestFullOffer(parseOffers({ results: [{ ...base, available_quantity: 1 }] }), 2), null);
+});
+
+test('one failed ML product preserves other products and VEA', async () => {
+  const { f, accounts } = await connected();
+  const original = accounts.client.offerSnapshot.bind(accounts.client);
+  accounts.client.offerSnapshot = (id, token, signal) => id === 'MLA200' ? Promise.reject(new MlError('Unavailable')) : original(id, token, signal);
+  const { app } = createApp(accounts);
+  const a = addItem(f, 'A'), b = addItem(f, 'B'); link(f, 'ml', 'A', 'MLA100'); link(f, 'ml', 'B', 'MLA200'); link(f, 'vea', 'B', '222');
+  const data = await (await call(app, f, '/compare', 'POST', { items: [{ itemId: a, qty: 1 }, { itemId: b, qty: 1 }] })).json() as Json;
+  assert.ok(data.mlError); assert.ok(data.carts.ml); assert.ok(data.carts.vea);
+  assert.equal(data.rows.find((r: Json) => r.itemId === a).ml.subtotalMinor, 455430);
+});
+
+
+test('thirty slow ML products respect a shared deadline and bounded concurrency', async () => {
+  const { createCompareRoutes } = await import('../src/routes/compare.js');
+  const { f, accounts } = await connected();
+  let active = 0, maxActive = 0, started = 0;
+  const client = new MlClient(config, async (_input, init) => {
+    active++; started++; maxActive = Math.max(active, maxActive);
+    try {
+      await new Promise<void>((_resolve, reject) => {
+        const stop = () => reject(new Error('aborted'));
+        if (init?.signal?.aborted) stop(); else init?.signal?.addEventListener('abort', stop, { once: true });
+      });
+      return Response.json({});
+    } finally { active--; }
+  });
+  accounts.client.offerSnapshot = client.offerSnapshot.bind(client);
+  const app = new Hono<import('../src/auth.js').AppEnv>();
+  app.use('*', async (c, next) => { c.set('user', { householdId: f.householdId } as never); await next(); });
+  app.route('/shopping/compare', createCompareRoutes(new VeaClient(veaTransport), accounts, 30));
+  const items = Array.from({ length: 30 }, (_, i) => { const name = `Item ${i}`; const itemId = addItem(f, name); link(f, 'ml', name, `MLA${100 + i}`); return { itemId, qty: 1 }; });
+  // Keep the event loop alive while native timeout signals (unref'ed timers) run.
+  const keepAlive = setInterval(() => {}, 100);
+  try {
+    const before = Date.now(); const res = await app.request('/shopping/compare', { method: 'POST', headers: headers(f), body: JSON.stringify({ items }) });
+    assert.equal(res.status, 200); const data = await res.json() as Json;
+    assert.ok(Date.now() - before < 2000); assert.equal(active, 0); assert.equal(maxActive, 4); assert.equal(started, 4);
+    assert.equal(data.rows.length, 30); assert.ok(data.mlError); assert.equal(data.carts.ml, null);
+  } finally { clearInterval(keepAlive); }
+});
+
+test('starting another authorization invalidates an exchange already in flight', async () => {
+  const f = makeHousehold(), accounts = newAccounts();
+  const firstState = new URL(accounts.startConnect(f.householdId, f.userId)).searchParams.get('state')!;
+  const first = deferred<MlTokens>(); accounts.client.exchangeCode = () => first.promise;
+  const running = accounts.complete(firstState, 'old');
+  const secondState = new URL(accounts.startConnect(f.householdId, f.otherUserId)).searchParams.get('state')!;
+  accounts.client.exchangeCode = async () => freshTokens('new'); await accounts.complete(secondState, 'new');
+  first.resolve(freshTokens('old')); await assert.rejects(running, /reemplazada/);
+  assert.equal(await accounts.accessToken(f.householdId), 'access-token-new');
+});
+
+test('mixed resimulation failure hides mixed total/carts but retains complete-store results', async () => {
+  const { f, accounts } = await connected();
+  const vea = new VeaClient(async (input, init) => {
+    const body = JSON.parse(String(init!.body));
+    if (body.items.length === 1) return new Response('{}', { status: 503 });
+    return veaTransport(input, init);
+  });
+  const { app } = createApp(accounts, vea);
+  const a = addItem(f, 'A'), b = addItem(f, 'B'); link(f, 'vea', 'A', '111'); link(f, 'vea', 'B', '222'); link(f, 'ml', 'A', 'MLA100');
+  const data = await (await call(app, f, '/compare', 'POST', { items: [{ itemId: a, qty: 1 }, { itemId: b, qty: 1 }] })).json() as Json;
+  assert.ok(data.mixedError); assert.equal(data.summary.mixed.productsMinor, null);
+  assert.equal(data.carts.mixedVea, null); assert.equal(data.carts.mixedMl, null);
+  assert.ok(data.carts.vea); assert.ok(data.carts.ml);
 });
