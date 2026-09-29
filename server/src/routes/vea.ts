@@ -3,11 +3,23 @@ import { z } from 'zod';
 import type { AppEnv } from '../auth.js';
 import { sqlite } from '../db/index.js';
 import { cartUrl, VeaClient, VeaError, VEA_SETTINGS } from '../stores/vea.js';
+import { loadPendingRows, productKey, quoteInput as input, storeLink, type PendingRow, type StoreItem as Item } from './store-rows.js';
 
-export const productKey = (item: { name: string; brand: string }) => `${item.name.trim()}|${item.brand.trim()}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase();
-type Item = { name: string; brand: string; status: string; batchId: string };
-type Link = { sku: string; ean: string; product_name: string; pack_qty: number };
-const input = z.object({ items: z.array(z.object({ itemId: z.string().uuid(), qty: z.number().int().min(1).max(99) }).strict()).min(1).max(30) }).strict();
+export { productKey };
+
+/** Cotización VEA de pendientes ya validados (compartida con la comparación VEA/ML). */
+export async function quoteVea(client: VeaClient, household: string, pending: PendingRow[]) {
+  const rows = [];
+  for (const r of pending) {
+    const link = storeLink(household, 'vea', r.itemKey);
+    if (link && r.qty * link.packQty > 99) throw new VeaError('La cantidad total de una presentación supera 99 unidades.');
+    rows.push({ ...r, link });
+  }
+  const result = await client.quote(rows.filter(r => r.link).map(r => ({ sku: r.link!.sku, qty: r.qty * r.link!.packQty })), VEA_SETTINGS, household);
+  const totalMinor = result.offers.reduce((n, i) => n + (i.available ? i.subtotalMinor! : 0), 0);
+  if (!Number.isSafeInteger(totalMinor)) throw new VeaError('El total recibido no es válido.');
+  return { rows, ...result, totalMinor, cartUrl: cartUrl(result.offers, VEA_SETTINGS), settings: VEA_SETTINGS };
+}
 
 // Mounted inside shoppingRoutes, after its session + household/user middleware.
 export function createVeaRoutes(client = new VeaClient()) {
@@ -63,23 +75,11 @@ export function createVeaRoutes(client = new VeaClient()) {
   routes.post('/quote', async c => {
     const parsed = input.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Cotizá hasta 30 productos, con cantidades enteras de 1 a 99.' }, 400);
-    if (new Set(parsed.data.items.map(i => i.itemId)).size !== parsed.data.items.length) return c.json({ error: 'La lista contiene ítems repetidos.' }, 400);
     const household = c.get('user').householdId;
-    const rows = [];
-    for (const request of parsed.data.items) {
-      const row = sqlite.prepare('SELECT data_json FROM shopping_items WHERE household_id=? AND id=?').get(household, request.itemId) as { data_json: string } | undefined;
-      if (!row) return c.json({ error: 'Un producto no pertenece a esta lista. Actualizá Compras.' }, 404);
-      const item = JSON.parse(row.data_json) as Item;
-      if (item.batchId || item.status === 'bought') return c.json({ error: 'La lista cambió: un producto ya está comprado o archivado. Actualizá Compras.' }, 409);
-      const key = productKey(item);
-      const link = sqlite.prepare("SELECT * FROM store_product_links WHERE household_id=? AND store='vea' AND item_key=?").get(household, key) as Link | undefined;
-      if (link && request.qty * link.pack_qty > 99) return c.json({ error: 'La cantidad total de una presentación supera 99 unidades.' }, 400);
-      rows.push({ ...request, itemKey: key, name: item.name, link: link ? { sku: link.sku, productName: link.product_name, packQty: link.pack_qty } : null });
-    }
-    const result = await client.quote(rows.filter(r => r.link).map(r => ({ sku: r.link!.sku, qty: r.qty * r.link!.packQty })), VEA_SETTINGS, household);
-    const totalMinor = result.offers.reduce((n, i) => n + (i.available ? i.subtotalMinor! : 0), 0);
-    if (!Number.isSafeInteger(totalMinor)) throw new VeaError('El total recibido no es válido.');
-    return c.json({ rows, ...result, totalMinor, cartUrl: cartUrl(result.offers, VEA_SETTINGS), settings: VEA_SETTINGS });
+    const loaded = loadPendingRows(household, parsed.data.items);
+    if ('error' in loaded) return c.json({ error: loaded.error }, loaded.status);
+    try { return c.json(await quoteVea(client, household, loaded.rows)); }
+    catch (e) { if (e instanceof VeaError && /supera 99/.test(e.message)) return c.json({ error: e.message }, 400); throw e; }
   });
   return routes;
 }

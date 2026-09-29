@@ -4,6 +4,7 @@ import { useAuth } from '../App';
 import { api } from '../lib/api';
 import { forgetOfflineProfile } from '../lib/offline-session';
 import VeaSettings from '../components/VeaSettings';
+import MlSettings from '../components/MlSettings';
 
 export default function Ajustes() {
   const { me } = useAuth();
@@ -37,6 +38,7 @@ export default function Ajustes() {
         <h1 className="text-lg font-bold">Ajustes</h1>
       </header>
       <VeaSettings />
+      <MlSettings />
 
       <div className="card">
         <p className="label">Hogar</p>

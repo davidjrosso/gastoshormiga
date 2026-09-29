@@ -18,13 +18,13 @@ test('shopping v5 to v6 migration preserves every existing table and is repeatab
   const db = new Database(':memory:');
   try {
     runMigrations(db);
-    db.exec('DROP TABLE store_product_links; DROP TABLE store_settings; DROP TABLE shopping_operations; DROP TABLE shopping_items; PRAGMA user_version=5');
+    db.exec('DROP TABLE store_oauth_pending; DROP TABLE store_accounts; DROP TABLE store_product_links; DROP TABLE store_settings; DROP TABLE shopping_operations; DROP TABLE shopping_items; PRAGMA user_version=5');
     db.exec("INSERT INTO households(id,name) VALUES('h','Existing'); INSERT INTO accounts(id,household_id,name,type) VALUES('a','h','Cash','efectivo'); INSERT INTO transactions(id,household_id,type,date,account_id,amount_minor) VALUES('t','h','gasto','2026-09-01','a',12345)");
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).map(t => t.name);
     const before = tables.map(t => db.prepare(`SELECT * FROM "${t}"`).all());
-    assert.deepEqual(runMigrations(db), { from: 5, to: 7 });
+    assert.deepEqual(runMigrations(db), { from: 5, to: 8 });
     assert.deepEqual(tables.map(t => db.prepare(`SELECT * FROM "${t}"`).all()), before);
-    assert.deepEqual(runMigrations(db), { from: 7, to: 7 });
+    assert.deepEqual(runMigrations(db), { from: 8, to: 8 });
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
     assert.deepEqual(db.pragma('foreign_key_check'), []);
   } finally { db.close(); }

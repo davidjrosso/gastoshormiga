@@ -1,24 +1,26 @@
-# Hormiga 0.6.0: cotización y carrito VEA
+# Hormiga 0.7.0: comparar VEA y Mercado Libre
 
-Implementación local solicitada por David el 29/09/2026. Desde Compras se pueden
-seleccionar pendientes, recordar productos VEA, cotizar disponibilidad/precio en
-Río Tercero y abrir un carrito con los disponibles. Pago/retiro se confirman en VEA.
+Implementación solicitada por David el 29/09/2026 (rama feat/comparar-ml).
+Desde Compras, “Comparar VEA / ML” cotiza pendientes en VEA Río Tercero (retiro,
+costo $0) y en Mercado Libre solo con ofertas Full, para un único envío. Muestra
+Todo VEA, Todo ML (envío orientativo de un paquete) y Mixto, y abre los carritos.
+Ajustes permite conectar la cuenta de ML (OAuth PKCE) por callback o pegando la URL.
 
-Cantidades enteras 1–99, agrupación de presentaciones repetidas, cotización efímera
-con vencimiento y selección de hasta 30 pendientes. Sin efectos sobre gastos,
-precios históricos ni shopping_items. Compras offline conserva su conducta.
-“En qué se fue” sigue por monto descendente; selectores alfabéticos.
+Sin efectos sobre gastos, precios históricos ni shopping_items. La cotización es
+efímera (2 minutos). “En qué se fue” sigue por monto descendente; selectores alfabéticos.
 
-0.6.0 en server/web y lockfiles; migración aditiva v7: store_settings y
-store_product_links. Sin dependencias nuevas. Binarios <=0.5.2 rechazan v7.
-API, límites y fuentes: docs/VEA.md.
+0.7.0 en server/web y lockfiles; migración aditiva v8: store_accounts y
+store_oauth_pending. Sin dependencias nuevas. Binarios <=0.6.0 rechazan v8.
+Tokens cifrados AES-256-GCM con HORMIGA_TOKEN_KEY. Variables, API y límites: docs/ML.md.
+El cotizador VEA 0.6.0 se refactorizó para compartir la carga de pendientes; mismas pruebas.
 
-111 pruebas server y 4 cliente, typecheck y builds APP_BASE=hormiga correctos.
-Migración en copia sintética v6 conserva tablas/filas previas, integridad y FK.
-Consulta pública y carrito anónimo con dos productos verificados. QA local web;
-queda comprobación final Android con sesión de David y elección de retiro.
+Pruebas server (incluye 12 nuevas de ML/comparación, sin red), 4 cliente,
+typecheck y builds APP_BASE=hormiga correctos. Endpoints ML verificados con la cuenta
+de David antes de programar; el carrito ML usa un enlace no documentado por ML.
+Pendiente: QA en producción (conectar, comparar, abrir carritos en PC y Android).
 
-David autorizó desplegar 0.6.0 el 29/09/2026. Estado previo conocido: 0.5.2 / 07704a0 / esquema v6.
+NO desplegado. Estado previo conocido: 0.6.0 / 2cfd1f8 / esquema v7.
 Antes de desplegar: autorización, estado real/commit, backup consistente y checksum,
-migración en copia, builds Linux, código/assets previos. Reiniciar solo Hormiga,
-comprobar Ticketera y registrar evidencia privada. Nunca reemplazar PROD por DEV.
+migración en copia, builds Linux, código/assets previos, variables ML y clave de tokens
+en el entorno. Reiniciar solo Hormiga, comprobar Ticketera y registrar evidencia privada.
+Nunca reemplazar PROD por DEV.

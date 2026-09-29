@@ -41,15 +41,15 @@ function addItem(f: Fixture, name = 'Leche', brand = '') {
 test('v7 migration preserves all existing data and rejects downgrade', () => {
   const db = new Database(':memory:');
   try {
-    runMigrations(db); db.exec('DROP TABLE store_product_links; DROP TABLE store_settings; PRAGMA user_version=6');
+    runMigrations(db); db.exec('DROP TABLE store_oauth_pending; DROP TABLE store_accounts; DROP TABLE store_product_links; DROP TABLE store_settings; PRAGMA user_version=6');
     db.exec("INSERT INTO households(id,name) VALUES('h','House'); INSERT INTO shopping_items VALUES('h','i','{}',1,1)");
     const before = db.prepare('SELECT * FROM shopping_items').all();
-    assert.deepEqual(runMigrations(db), { from: 6, to: 7 });
+    assert.deepEqual(runMigrations(db), { from: 6, to: 8 });
     assert.deepEqual(db.prepare('SELECT * FROM shopping_items').all(), before);
-    assert.deepEqual(runMigrations(db), { from: 7, to: 7 });
+    assert.deepEqual(runMigrations(db), { from: 8, to: 8 });
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
     assert.deepEqual(db.pragma('foreign_key_check'), []);
-    db.pragma('user_version=8'); assert.throws(() => runMigrations(db), /más viejo/);
+    db.pragma('user_version=9'); assert.throws(() => runMigrations(db), /más viejo/);
   } finally { db.close(); }
 });
 test('simulation maps by requestIndex, keeps integer totals and requires exact seller, quantity and branch pickup', () => {

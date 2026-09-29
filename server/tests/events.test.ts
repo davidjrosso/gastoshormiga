@@ -42,12 +42,12 @@ test('v4 to v6 only adds metadata tables, preserves transactions, and is repeata
   const db = new Database(':memory:');
   try {
     runMigrations(db);
-    db.exec('DROP TABLE store_product_links; DROP TABLE store_settings; DROP TABLE shopping_operations; DROP TABLE shopping_items; DROP TABLE card_event_rules; DROP TABLE event_transactions; DROP TABLE events; PRAGMA user_version=4;');
+    db.exec('DROP TABLE store_oauth_pending; DROP TABLE store_accounts; DROP TABLE store_product_links; DROP TABLE store_settings; DROP TABLE shopping_operations; DROP TABLE shopping_items; DROP TABLE card_event_rules; DROP TABLE event_transactions; DROP TABLE events; PRAGMA user_version=4;');
     db.exec("INSERT INTO households(id,name) VALUES('h','Test'); INSERT INTO accounts(id,household_id,name,type) VALUES('a','h','Cash','efectivo'); INSERT INTO transactions(id,household_id,type,date,account_id,amount_minor) VALUES('t','h','gasto','2026-08-01','a',12345);");
     const before = db.prepare('SELECT * FROM transactions').all();
-    assert.deepEqual(runMigrations(db), { from: 4, to: 7 });
+    assert.deepEqual(runMigrations(db), { from: 4, to: 8 });
     assert.deepEqual(db.prepare('SELECT * FROM transactions').all(), before);
-    assert.deepEqual(runMigrations(db), { from: 7, to: 7 });
+    assert.deepEqual(runMigrations(db), { from: 8, to: 8 });
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
     assert.deepEqual(db.pragma('foreign_key_check'), []);
   } finally { db.close(); }

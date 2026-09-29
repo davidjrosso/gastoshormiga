@@ -56,8 +56,10 @@ export default defineConfig({
         // Las llamadas a la API van a red primero: datos viejos en una app de
         // plata es peor que un error honesto.
         navigateFallback: `${APP_BASE}index.html`,
+        // Las navegaciones a la API (p. ej. la vuelta de OAuth de Mercado Libre) van al servidor.
+        navigateFallbackDenylist: [/\/api\//],
         runtimeCaching: [
-          { urlPattern: /\/api\/(?:shopping|auth)(?:\/|$|\?)/, handler: 'NetworkOnly' },
+          { urlPattern: /\/api\/(?:shopping|auth|ml)(?:\/|$|\?)/, handler: 'NetworkOnly' },
           { urlPattern: /\/api\/events(?:\/|\?|$)/, handler: 'NetworkOnly' },
           { urlPattern: /\/api\/analytics\/installments(?:\?|$)/, handler: 'NetworkOnly' },
           { urlPattern: /\/api\/statements(?:\/|$)/, handler: 'NetworkOnly' },

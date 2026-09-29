@@ -255,6 +255,22 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY(household_id, store, item_key)
   );
   `,
+  // v8: external store accounts (encrypted OAuth tokens) and short-lived OAuth
+  // state. No shopping/financial writes.
+  `
+  CREATE TABLE store_accounts (
+    household_id TEXT NOT NULL REFERENCES households(id), store TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id), external_user_id TEXT NOT NULL,
+    access_token_enc TEXT NOT NULL, refresh_token_enc TEXT NOT NULL,
+    expires_at INTEGER NOT NULL, scope TEXT NOT NULL, updated_at INTEGER NOT NULL,
+    PRIMARY KEY(household_id, store)
+  );
+  CREATE TABLE store_oauth_pending (
+    state TEXT PRIMARY KEY, store TEXT NOT NULL,
+    household_id TEXT NOT NULL REFERENCES households(id), user_id TEXT NOT NULL REFERENCES users(id),
+    code_verifier_enc TEXT NOT NULL, created_at INTEGER NOT NULL
+  );
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

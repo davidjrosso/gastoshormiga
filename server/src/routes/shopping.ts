@@ -3,7 +3,11 @@ import { z } from 'zod';
 import { requireAuth, type AppEnv } from '../auth.js';
 import { sqlite } from '../db/index.js';
 import { createVeaRoutes } from './vea.js';
-import type { VeaClient } from '../stores/vea.js';
+import { VeaClient } from '../stores/vea.js';
+import { MlClient } from '../stores/ml.js';
+import { MlAccounts } from '../stores/ml-account.js';
+import { createMlRoutes } from './ml.js';
+import { createCompareRoutes } from './compare.js';
 
 const fields = z.object({
   name: z.string().trim().min(1).max(120),
@@ -30,7 +34,7 @@ function snapshot(householdId: string) {
   }))();
 }
 
-export function createShoppingRoutes(veaClient?: VeaClient) {
+export function createShoppingRoutes(veaClient = new VeaClient(), mlAccounts = new MlAccounts(new MlClient())) {
 const shoppingRoutes = new Hono<AppEnv>();
 shoppingRoutes.use('*', async (c, next) => { c.header('Cache-Control', 'no-store'); await next(); });
 shoppingRoutes.use('*', requireAuth);
@@ -43,6 +47,8 @@ shoppingRoutes.use('*', async (c, next) => {
 });
 shoppingRoutes.get('/', c => c.json(snapshot(c.get('user').householdId)));
 shoppingRoutes.route('/stores/vea', createVeaRoutes(veaClient));
+shoppingRoutes.route('/stores/ml', createMlRoutes(mlAccounts));
+shoppingRoutes.route('/compare', createCompareRoutes(veaClient, mlAccounts));
 shoppingRoutes.post('/operations', async c => {
   const parsed = operation.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) return c.json({ error: 'Revisá los datos del producto' }, 400);
@@ -85,4 +91,6 @@ shoppingRoutes.post('/operations', async c => {
 
 return shoppingRoutes;
 }
-export const shoppingRoutes = createShoppingRoutes();
+/** Una sola cuenta ML por proceso: la comparte la vuelta pública de OAuth. */
+export const mlAccounts = new MlAccounts(new MlClient());
+export const shoppingRoutes = createShoppingRoutes(new VeaClient(), mlAccounts);
