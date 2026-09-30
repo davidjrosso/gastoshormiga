@@ -24,6 +24,7 @@ export default function CompareStores({ items, onClose }: { items: ShoppingItem[
   const [error, setError] = useState(''); const [busy, setBusy] = useState(false); const [now, setNow] = useState(Date.now());
   const [choosing, setChoosing] = useState<ShoppingItem | null>(null); const [term, setTerm] = useState('');
   const [results, setResults] = useState<MlProduct[] | null>(null);
+  const [searchInfo, setSearchInfo] = useState<{ scanned: number; searchUrl: string | null; notice: string | null } | null>(null);
   const chosen = items.filter(i => selected.has(i.id));
   const signature = JSON.stringify(chosen.map(i => [i.id, i.revision, i.name, i.brand, quantities[i.id]]));
   const [comparedSignature, setComparedSignature] = useState('');
@@ -49,8 +50,11 @@ export default function CompareStores({ items, onClose }: { items: ShoppingItem[
   useEffect(() => { void compare(); }, []);
   async function search() {
     if (term.trim().length < 2 || !online) return;
-    setBusy(true); setError(''); setResults(null);
-    try { const r = await api<{ products: MlProduct[] }>(`/stores/ml/search?q=${encodeURIComponent(term.trim())}`); if (alive.current) setResults(r.products); }
+    setBusy(true); setError(''); setResults(null); setSearchInfo(null);
+    try {
+      const r = await api<{ products: MlProduct[]; scanned: number; searchUrl: string | null; notice: string | null }>(`/stores/ml/search?q=${encodeURIComponent(term.trim())}`);
+      if (alive.current) { setResults(r.products); setSearchInfo({ scanned: r.scanned, searchUrl: r.searchUrl, notice: r.notice }); }
+    }
     catch (e) { if (alive.current) setError((e as Error).message); }
     finally { if (alive.current) setBusy(false); }
   }
@@ -104,11 +108,15 @@ export default function CompareStores({ items, onClose }: { items: ShoppingItem[
 
     {choosing && <section className="mt-4 rounded-xl border-2 border-emerald-600 p-3" aria-label={`Buscar en Mercado Libre para ${choosing.name}`}>
       <h3 className="font-semibold">Elegir en Mercado Libre para {choosing.name}</h3>
-      <form className="mt-2 flex gap-2" onSubmit={e => { e.preventDefault(); void search(); }}><input ref={searchInput} className="input min-w-0 flex-1" aria-label="Buscar en Mercado Libre" maxLength={120} value={term} onChange={e => { setTerm(e.target.value); setResults(null); }} disabled={busy} /><button className="btn-primary" disabled={busy || !online || term.trim().length < 2}>Buscar</button></form>
-      {results?.length === 0 && <p className="mt-2 text-sm">No se encontraron productos. Probá otro nombre.</p>}
+      <form className="mt-2 flex gap-2" onSubmit={e => { e.preventDefault(); void search(); }}><input ref={searchInput} className="input min-w-0 flex-1" aria-label="Buscar en Mercado Libre o pegar enlace de una ficha" maxLength={300} value={term} onChange={e => { setTerm(e.target.value); setResults(null); setSearchInfo(null); }} disabled={busy} /><button className="btn-primary" disabled={busy || !online || term.trim().length < 2}>Buscar</button></form>
+      <p className="mt-1 text-xs text-ink-mute dark:text-slate-400">Nombre del producto, o un enlace de ML que contenga /p/MLA… (compartir desde la app).</p>
+      {searchInfo?.notice && <p role="status" className="mt-2 rounded-lg bg-amber-50 p-2 text-sm text-amber-900">{searchInfo.notice}</p>}
+      {results?.length === 0 && !searchInfo?.notice && <p className="mt-2 text-sm">No se encontraron productos. Probá otro nombre.</p>}
+      {searchInfo?.searchUrl && !results?.some(p => p.offer) && <a className="mt-2 inline-block text-sm underline" href={searchInfo.searchUrl} target="_blank" rel="noopener noreferrer">Buscar en Mercado Libre</a>}
       <ul className="mt-2 space-y-2">{results?.map(p => <li key={p.productId} className="rounded-lg bg-slate-50 p-2 text-sm dark:bg-slate-800"><p>{p.productName}</p>
         <p className="mt-1">{p.offer ? `${money(p.offer.unitMinor)} Full · ${p.offer.freeShipping ? 'envío gratis' : `envío ${price(p.offer.shippingMinor)}`}` : p.reason}</p>
-        <button className="btn-ghost mt-2 text-sm" disabled={busy || !online || !p.offer} onClick={() => void link(p, choosing)}>Recordar este producto</button></li>)}</ul>
+        {p.offer && <button className="btn-ghost mt-2 text-sm" disabled={busy || !online} onClick={() => void link(p, choosing)}>Recordar este producto</button>}</li>)}</ul>
+      {!!searchInfo?.scanned && results?.some(p => p.offer) && <p className="mt-2 text-xs text-ink-mute dark:text-slate-400">Revisamos {searchInfo.scanned} fichas del catálogo; primero las más baratas con Full.</p>}
       <button className="mt-2 min-h-10 text-sm underline" disabled={busy} onClick={() => setChoosing(null)}>Cerrar buscador</button>
     </section>}
 

@@ -26,6 +26,24 @@ la compra y el pago se completan en cada tienda.
   y cantidad de paquetes se confirman en el checkout. La búsqueda puede mostrar una
   referencia de envío individual; no se suma al total del carrito.
 
+### Búsqueda en ML (0.7.2)
+
+Diagnóstico del 30/09/2026 con la cuenta de David: la búsqueda del catálogo devuelve muchas
+fichas sin ofertas (404) o sin Full antes de las que sí las tienen; no es intermitente.
+Por eso la búsqueda ahora:
+
+- lee hasta 3 páginas del catálogo (30 fichas) y revisa sus ofertas, 5 a la vez, con plazo
+  de 15 s; muestra primero hasta 8 fichas con Full, de menor a mayor precio, y como mucho
+  2 sin Full (4 si ninguna tiene);
+- lee hasta 100 ofertas por ficha (páginas de 20): algunas tienen las Full después de la
+  primera página; esto también aplica a la comparación;
+- acepta un enlace de ficha pegado desde la app (`…mercadolibre.com.ar/…/p/MLA…`). Las
+  publicaciones sueltas (`articulo…/MLA-…`) no sirven: la API no deja leer su precio;
+- si ninguna ficha tiene Full, lo dice y ofrece abrir la búsqueda en la web de ML.
+
+Límite conocido: publicaciones que no están asociadas a una ficha del catálogo no aparecen
+en Hormiga; `/sites/MLA/search` sigue respondiendo 403 con token de usuario.
+
 Cotizaciones solo en memoria. Vigencia máxima de dos minutos desde la consulta original,
 respetando la antigüedad de la caché y la expiración más temprana. Editar la lista, quedar
 sin conexión o vencer la cotización bloquea la apertura desde la interfaz hasta actualizar.

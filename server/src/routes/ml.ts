@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AppEnv } from '../auth.js';
 import { sqlite } from '../db/index.js';
-import { bestFullOffer, MlAuthError, MlClient, MlError, parseReturnUrl } from '../stores/ml.js';
+import { bestFullOffer, catalogIdFromUrl, isListingUrl, listingSearchUrl, MlAuthError, MlClient, MlError, parseReturnUrl } from '../stores/ml.js';
 import { MlAccounts } from '../stores/ml-account.js';
 import { productKey, storeLimiter, type StoreItem } from './store-rows.js';
 
@@ -39,18 +39,39 @@ export function createMlRoutes(accounts = new MlAccounts(new MlClient())) {
   routes.use('/search', storeLimiter('Mercado Libre'));
   routes.use('/links/*', storeLimiter('Mercado Libre'));
   routes.get('/search', async c => {
-    const term = z.string().trim().min(2).max(120).safeParse(c.req.query('q'));
+    const term = z.string().trim().min(2).max(300).safeParse(c.req.query('q'));
     if (!term.success) return c.json({ error: 'Escribí entre 2 y 120 caracteres.' }, 400);
     const household = c.get('user').householdId;
     const token = await accounts.accessToken(household);
-    const products = (await client.searchCatalog(term.data, token)).slice(0, 6);
-    const withOffers = await Promise.all(products.map(async p => {
-      const offer = bestFullOffer(await client.offers(p.productId, token));
-      const shipping = offer && !offer.freeShipping ? await client.shipping(offer.itemId, token, household) : null;
-      return { ...p, offer: offer && { itemId: offer.itemId, unitMinor: offer.unitMinor, freeShipping: offer.freeShipping, shippingMinor: offer.freeShipping ? 0 : shipping?.costMinor ?? null, eta: shipping?.eta ?? null },
-        reason: offer ? null : 'Sin ofertas Full para este producto.' };
+    // Enlace pegado desde la app: una ficha de catálogo se usa directo.
+    const pastedId = catalogIdFromUrl(term.data);
+    if (!pastedId && isListingUrl(term.data)) return c.json({ products: [], scanned: 0, searchUrl: null,
+      notice: 'Ese enlace es de una publicación suelta, no de una ficha de catálogo. Hormiga solo puede comparar fichas (enlaces con /p/MLA…). Buscá el producto por nombre.' });
+    if (!pastedId && term.data.length > 120) return c.json({ error: 'Escribí entre 2 y 120 caracteres.' }, 400);
+    const candidates = pastedId ? [await client.product(pastedId, token)].filter((p): p is NonNullable<typeof p> => !!p) : (await client.searchCatalog(term.data, token)).slice(0, 30);
+    // Se revisan hasta 30 fichas (5 a la vez, con plazo) y se muestran primero las que tienen Full.
+    const signal = AbortSignal.timeout(15_000);
+    const evaluated: Array<{ p: (typeof candidates)[number]; offer: ReturnType<typeof bestFullOffer> | undefined }> = candidates.map(p => ({ p, offer: undefined }));
+    let cursor = 0;
+    await Promise.all(Array.from({ length: Math.min(5, evaluated.length) }, async () => {
+      while (cursor < evaluated.length && !signal.aborted) {
+        const slot = evaluated[cursor++];
+        try { slot.offer = bestFullOffer((await client.offerSnapshot(slot.p.productId, token, signal)).offers); }
+        catch (e) { if (e instanceof MlAuthError) throw e; slot.offer = undefined; }
+        if (!pastedId && evaluated.filter(x => x.offer).length >= 8) return;
+      }
     }));
-    return c.json({ products: withOffers });
+    const withFull = evaluated.filter(x => x.offer).sort((a, b) => a.offer!.unitMinor - b.offer!.unitMinor).slice(0, 8);
+    const withoutFull = evaluated.filter(x => x.offer === null).slice(0, withFull.length ? 2 : 4);
+    const products = await Promise.all([...withFull, ...withoutFull].map(async ({ p, offer }) => {
+      const shipping = offer && !offer.freeShipping ? await client.shipping(offer.itemId, token, household).catch(() => null) : null;
+      return { ...p, offer: offer ? { itemId: offer.itemId, unitMinor: offer.unitMinor, freeShipping: offer.freeShipping, shippingMinor: offer.freeShipping ? 0 : shipping?.costMinor ?? null, eta: shipping?.eta ?? null } : null,
+        reason: offer ? null : 'Esta ficha no tiene ofertas Full.' };
+    }));
+    const scanned = evaluated.filter(x => x.offer !== undefined).length;
+    return c.json({ products, scanned, searchUrl: pastedId ? null : listingSearchUrl(term.data),
+      notice: withFull.length ? null : pastedId ? 'Esa ficha no tiene ofertas Full en este momento.'
+        : `Revisamos ${scanned} fichas del catálogo y ninguna tiene ofertas Full. En la app de ML pueden aparecer publicaciones que no están en el catálogo: si ves una Full con enlace /p/MLA…, pegalo acá.` });
   });
   routes.put('/links/:itemKey', async c => {
     const parsed = z.object({ itemId: z.string().uuid(), productId: z.string().regex(/^MLA\d{1,15}$/), packQty: z.number().int().min(1).max(99).default(1) }).strict().safeParse(await c.req.json().catch(() => null));

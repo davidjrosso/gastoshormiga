@@ -73,7 +73,24 @@ export interface MlProduct { productId: string; productName: string; gtin: strin
 const catalogSchema = z.object({ results: z.array(z.object({ id: z.string(), name: z.string() }).passthrough()).default([]) });
 export function parseCatalog(data: unknown): MlProduct[] {
   return catalogSchema.parse(data).results.filter(r => productId.safeParse(r.id).success)
-    .map(r => ({ productId: r.id, productName: r.name, gtin: '' })).slice(0, 10);
+    .map(r => ({ productId: r.id, productName: r.name, gtin: '' }));
+}
+/**
+ * Ficha de catálogo pegada desde la app o la web de ML (`…/p/MLA123…`). Las publicaciones
+ * sueltas (`articulo.mercadolibre…/MLA-123-…`) no sirven: la API no deja leer su precio.
+ */
+export function catalogIdFromUrl(raw: string): string | null {
+  let url: URL;
+  try { url = new URL(raw.trim()); } catch { return null; }
+  if (url.protocol !== 'https:' || !/(^|\.)mercadolibre\.com\.ar$/.test(url.hostname)) return null;
+  const match = url.pathname.match(/\/p\/(MLA\d{1,15})(?:$|[/?#])/);
+  return match ? match[1] : null;
+}
+export const isListingUrl = (raw: string) => /mercadolibre\.com\.ar\/.*MLA-?\d{6,}/i.test(raw) && !/\/p\/MLA\d/.test(raw);
+/** Búsqueda en la web de ML, para revisar a mano lo que no está en el catálogo. */
+export function listingSearchUrl(term: string): string {
+  const slug = term.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+  return `https://listado.mercadolibre.com.ar/${slug || 'supermercado'}`;
 }
 const productSchema = z.object({ id: productId, name: z.string(), attributes: z.array(z.object({ id: z.string(), value_name: z.string().nullable().optional() })).default([]) });
 export function parseProduct(data: unknown): MlProduct {
@@ -168,10 +185,24 @@ export class MlClient {
     return this.token({ grant_type: 'authorization_code', code, redirect_uri: this.requireConfig().redirectUri, code_verifier: verifier });
   }
   refresh(refreshToken: string) { return this.token({ grant_type: 'refresh_token', refresh_token: refreshToken }); }
-  searchCatalog(term: string, token: string): Promise<MlProduct[]> {
-    return this.cached(`search:${term}`, 600_000, async () => {
-      const data = await this.get(`/products/search?${new URLSearchParams({ status: 'active', site_id: ML_SITE, q: term, limit: '10' })}`, token);
-      try { return parseCatalog(data); } catch { throw new MlError('Mercado Libre cambió la respuesta del catálogo.'); }
+  /**
+   * Hasta `pages` páginas de 10 fichas. Muchas fichas de ML no tienen ofertas (o no Full):
+   * con solo las primeras quedaban afuera productos que la app sí muestra.
+   */
+  searchCatalog(term: string, token: string, pages = 3): Promise<MlProduct[]> {
+    return this.cached(`search:${term}:${pages}`, 600_000, async () => {
+      const found: MlProduct[] = [];
+      for (let page = 0; page < pages; page++) {
+        const params = new URLSearchParams({ status: 'active', site_id: ML_SITE, q: term, limit: '10', offset: String(page * 10) });
+        let data: unknown;
+        try { data = await this.get(`/products/search?${params}`, token); }
+        catch (e) { if (page === 0 || e instanceof MlAuthError) throw e; break; }
+        let batch: MlProduct[];
+        try { batch = parseCatalog(data); } catch { if (page === 0) throw new MlError('Mercado Libre cambió la respuesta del catálogo.'); break; }
+        for (const p of batch) if (!found.some(f => f.productId === p.productId)) found.push(p);
+        if (batch.length < 10) break;
+      }
+      return found;
     });
   }
   product(id: string, token: string): Promise<MlProduct | null> {
@@ -190,9 +221,19 @@ export class MlClient {
     const scope = createHash('sha256').update(token).digest('hex');
     return this.cached(`offers:${scope}:${id}`, 120_000, async () => {
       const quotedAt = Date.now();
-      const data = await this.get(`/products/${id}/items?limit=20`, token, true, signal);
-      try { return { offers: data === null ? [] : parseOffers(data), quotedAt, expiresAt: quotedAt + 120_000 }; }
-      catch { throw new MlError('No se pudieron leer las ofertas de Mercado Libre.'); }
+      // Hasta 100 ofertas en páginas de 20: algunas fichas tienen las Full después de la primera.
+      const offers: MlOffer[] = [];
+      for (let offset = 0; offset < 100; offset += 20) {
+        const data = await this.get(`/products/${id}/items?limit=20&offset=${offset}`, token, true, signal);
+        if (data === null) break;
+        let page: MlOffer[];
+        try { page = parseOffers(data); } catch { throw new MlError('No se pudieron leer las ofertas de Mercado Libre.'); }
+        offers.push(...page);
+        const paging = (data as { paging?: { total?: unknown } }).paging;
+        const results = (data as { results?: unknown[] }).results ?? [];
+        if (results.length < 20 || typeof paging?.total !== 'number' || offset + 20 >= paging.total) break;
+      }
+      return { offers, quotedAt, expiresAt: quotedAt + 120_000 };
     });
   }
   /** `scope` separa la caché por hogar: con Meli+ el costo puede depender de la cuenta. */

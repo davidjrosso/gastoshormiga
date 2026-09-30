@@ -435,3 +435,67 @@ test('mixed resimulation failure hides mixed total/carts but retains complete-st
   assert.equal(data.carts.mixedVea, null); assert.equal(data.carts.mixedMl, null);
   assert.ok(data.carts.vea); assert.ok(data.carts.ml);
 });
+
+// Shape seen in the 2026-09-30 diagnosis: the first catalog fichas often have no offers
+// (404) or no Full offers; Full ones appear further down, and some fichas page offers.
+test('search scans several catalog pages, skips fichas without Full, pages offers and sorts by price', async () => {
+  const seen: string[] = [];
+  const fichas = Array.from({ length: 25 }, (_, i) => ({ id: `MLA${500 + i}`, name: `Jabón ficha ${i}` }));
+  const offer = (item: string, price: number, lt: string) => ({ item_id: item, price, currency_id: 'ARS', seller_id: 1, condition: 'new', shipping: { logistic_type: lt, free_shipping: true } });
+  const transport: typeof fetch = async (input) => {
+    const url = new URL(String(input)); seen.push(url.pathname + url.search);
+    if (url.pathname === '/products/search') {
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      return Response.json({ results: fichas.slice(offset, offset + 10), paging: { total: fichas.length } });
+    }
+    const m = url.pathname.match(/^\/products\/(MLA\d+)\/items$/);
+    if (m) {
+      const n = Number(m[1].slice(3)) - 500; const offset = Number(url.searchParams.get('offset') ?? 0);
+      if (n < 3) return new Response('{}', { status: 404 });                       // sin ofertas
+      if (n < 12) return Response.json({ results: [offer(`MLA7${n}`, 1000, 'drop_off')], paging: { total: 1 } }); // sin Full
+      if (n === 12) {                                                               // Full en la 2.ª página
+        const page = offset === 0 ? Array.from({ length: 20 }, (_, i) => offer(`MLA80${i}`, 500, 'cross_docking')) : [offer('MLA8999', 900, 'fulfillment')];
+        return Response.json({ results: page, paging: { total: 21 } });
+      }
+      return Response.json({ results: [offer(`MLA9${n}`, 2000 - n, 'fulfillment')], paging: { total: 1 } });
+    }
+    const ficha = url.pathname.match(/^\/products\/(MLA\d+)$/);
+    if (ficha) return Response.json({ id: ficha[1], name: `Ficha ${ficha[1]}`, attributes: [] });
+    return new Response('{}', { status: 404 });
+  };
+  const f = makeHousehold();
+  const accounts = new MlAccounts(new MlClient(config, transport), key);
+  (accounts as unknown as { accessToken: () => Promise<string> }).accessToken = async () => 'APP_USR-test';
+  const app = new Hono().route('/shopping', createShoppingRoutes(new VeaClient(veaTransport), accounts));
+  const found = await (await call(app, f, '/stores/ml/search?q=jabon%20skip')).json() as Json;
+  const withFull = found.products.filter((p: Json) => p.offer);
+  assert.ok(seen.some(s => s.includes('offset=10')) && seen.some(s => s.includes('offset=20')), 'reads more than the first catalog page');
+  assert.equal(withFull[0].offer.itemId, 'MLA8999', 'Full offer on the second offers page is found and is the cheapest');
+  assert.deepEqual(withFull.map((p: Json) => p.offer.unitMinor), [...withFull.map((p: Json) => p.offer.unitMinor)].sort((a: number, b: number) => a - b));
+  assert.ok(withFull.length >= 8 && found.products.length <= 10);
+  assert.equal(found.notice, null);
+  assert.match(found.searchUrl, /^https:\/\/listado\.mercadolibre\.com\.ar\/jabon-skip$/);
+
+  // Nada con Full: aviso honesto y enlace a la búsqueda en ML.
+  fichas.splice(12);
+  const none = await (await call(app, f, '/stores/ml/search?q=otro%20jabon')).json() as Json;
+  assert.equal(none.products.filter((p: Json) => p.offer).length, 0);
+  assert.match(none.notice, /Revisamos 12 fichas/);
+
+  // Enlace pegado: ficha /p/ se usa directo; publicación suelta se explica.
+  const pasted = await (await call(app, f, `/stores/ml/search?q=${encodeURIComponent('https://www.mercadolibre.com.ar/jabon-skip/p/MLA513?pdp_filters=x')}`)).json() as Json;
+  assert.deepEqual(pasted.products.map((p: Json) => p.productId), ['MLA513']);
+  const listing = await (await call(app, f, `/stores/ml/search?q=${encodeURIComponent('https://articulo.mercadolibre.com.ar/MLA-1234567890-jabon-skip-_JM')}`)).json() as Json;
+  assert.equal(listing.products.length, 0); assert.match(listing.notice, /publicación suelta/);
+});
+
+test('catalog links only accept mercadolibre.com.ar ficha URLs', async () => {
+  const { catalogIdFromUrl, isListingUrl } = await import('../src/stores/ml.js');
+  assert.equal(catalogIdFromUrl('https://www.mercadolibre.com.ar/x/p/MLA123#y'), 'MLA123');
+  assert.equal(catalogIdFromUrl('https://evil.example/p/MLA123'), null);
+  assert.equal(catalogIdFromUrl('https://mercadolibre.com.ar.evil.example/p/MLA123'), null);
+  assert.equal(catalogIdFromUrl('http://www.mercadolibre.com.ar/p/MLA123'), null);
+  assert.equal(catalogIdFromUrl('yerba'), null);
+  assert.equal(isListingUrl('https://articulo.mercadolibre.com.ar/MLA-1234567890-x'), true);
+  assert.equal(isListingUrl('https://www.mercadolibre.com.ar/x/p/MLA123'), false);
+});
