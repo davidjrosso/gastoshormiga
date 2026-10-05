@@ -132,7 +132,8 @@ test('extraordinary events leave monthly totals and balances intact but clean bo
   assert.equal(monthlySummary(f.householdId, '2026-09').habitualExpenseMinor, 95000);
 });
 
-test('habit detectors ignore extraordinary purchases and include ordinary events', () => {
+test('habit detectors ignore extraordinary purchases and include ordinary events', (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-25T12:00:00Z') });
   const f = makeHousehold(); const merchantId = makeMerchant(f.householdId, 'Cafecito'); const id = event(f);
   const ids = [1, 2, 3, 4, 5, 6].map(n => addTx(f, { date: daysAgo(n), amountMinor: 100, merchantId }));
   addTx(f, { type: 'ingreso', date: daysAgo(1), amountMinor: 100000 });

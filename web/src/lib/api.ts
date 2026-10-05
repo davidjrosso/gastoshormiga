@@ -134,6 +134,7 @@ export interface CategoryTrend {
   color: string;
   currentMinor: number;
   baselineMinor: number;
+  baselinePeriods: string[];
   changePct: number | null;
   shareOfIncomePct: number | null;
   baselineShareOfIncomePct: number | null;

@@ -212,6 +212,8 @@ export default function Dashboard() {
       {/* Categorías */}
       <div className="card">
         <p className="label mb-3">En qué se fue</p>
+        <p className="mb-3 text-xs text-ink-mute dark:text-slate-400">Comparamos el gasto habitual con hasta 3 meses anteriores con gastos registrados en el hogar. Un mes cargado puede estar incompleto.</p>
+        {period === currentPeriod() && <p className="mb-3 text-xs font-medium">Mes en curso: el gasto acumulado se compara con meses anteriores completos.</p>}
         {trends.length === 0 && (
           <p className="text-sm text-ink-mute dark:text-slate-400">
             Todavía no hay gastos cargados este mes.
@@ -249,10 +251,13 @@ export default function Dashboard() {
                   </span>
                   {t.changePct != null && (
                     <span className={t.changePct > 15 ? 'font-medium text-red-600 dark:text-red-400' : ''}>
-                      {pct(t.changePct, true)} habitual vs. meses previos
+                      {pct(t.changePct, true)} habitual vs. promedio de {t.baselinePeriods.length} {t.baselinePeriods.length === 1 ? 'mes' : 'meses'}
                     </span>
                   )}
                 </div>
+                <p className="mt-1 text-xs text-ink-mute dark:text-slate-400">
+                  {t.baselinePeriods.length ? <>Promedio habitual: {money(t.baselineMinor)} · {t.baselinePeriods.map(periodLabel).join(', ')}{t.baselineMinor <= 0 && ' · Sin base positiva para calcular variación.'}</> : 'Sin meses anteriores con gastos para comparar.'}
+                </p>
                 {t.habitualMinor !== t.currentMinor && <p className="mt-1 text-xs text-ink-mute dark:text-slate-400">Habitual: {money(t.habitualMinor)} · el total incluye eventos extraordinarios.</p>}
                 </button>
                 <div id={`category-expenses-${categoryKey}`} hidden={!expanded}>

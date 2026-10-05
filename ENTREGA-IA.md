@@ -1,4 +1,19 @@
-# Hormiga 0.7.2: búsqueda en Mercado Libre
+# Hormiga 0.7.3: comparación de categorías y manual de tarjetas
+
+Preparado localmente sobre main 7778c09 (0.7.2 desplegada). Sin despliegue de 0.7.3.
+Server/web y ambos lockfiles actualizados a 0.7.3; esquema v8 sin cambios.
+
+"En qué se fue" compara gasto habitual con el promedio de hasta tres meses previos
+que tengan gastos del hogar. Omite meses sin gastos registrados; cuenta el cero de
+una categoría cuando sí hubo otros gastos en ese mes. Muestra meses de referencia,
+promedio y aviso de mes en curso. Conserva orden por monto descendente y exclusión
+de eventos extraordinarios del gasto habitual. Un mes con registros puede estar incompleto.
+
+Manual de uso: docs/MANUAL-TARJETAS.md, desde PDF y revisión hasta incorporación al
+hogar, pagos de adicionales y cuotas futuras. Pruebas nuevas: category-trends.test.ts.
+Las pruebas de detectores usan una fecha fija para evitar fallas al iniciar el mes.
+
+## Antecedente 0.7.2 (ya desplegado)
 
 Base: main 72b22a3 (0.7.1, desplegada con la comparación VEA / ML). Rama fix/ml-busqueda.
 David reportó que al buscar en ML a veces aparecía "Sin ofertas" aunque la app de ML mostraba
@@ -13,6 +28,6 @@ Sin migraciones ni dependencias nuevas; esquema v8 sin cambios. Detalle: docs/ML
 Server/web y lockfiles 0.7.2. Pruebas server (incluye regresión del caso diagnosticado),
 cliente, typecheck y builds APP_BASE=hormiga correctos.
 
-NO desplegado. Parches de seguridad de claude/SEGURIDAD-2026-09-29.md siguen pendientes.
+0.7.2 desplegada el 30/09/2026. Parches de seguridad de claude/SEGURIDAD-2026-09-29.md siguen pendientes.
 Antes de desplegar: autorización, estado real/commit, backup consistente, builds Linux,
 código/assets previos. Reiniciar solo Hormiga y comprobar Ticketera. Nunca reemplazar PROD por DEV.

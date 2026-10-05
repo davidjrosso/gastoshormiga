@@ -462,6 +462,7 @@ export interface CategoryTrend {
   color: string;
   currentMinor: number;
   baselineMinor: number;
+  baselinePeriods: string[];
   changePct: number | null;
   /** Porcentaje del ingreso del mes. La métrica que la inflación no distorsiona. */
   shareOfIncomePct: number | null;
@@ -478,9 +479,14 @@ export interface CategoryTrend {
  */
 export function categoryTrends(householdId: string, period: string, monthsBack = 3): CategoryTrend[] {
   const { start, end } = periodRange(period);
-  const baselineStartPeriod = shiftPeriod(period, monthsBack);
-  const baselineStart = periodRange(baselineStartPeriod).start;
-  const baselineEnd = periodRange(shiftPeriod(period, 1)).end;
+  // Un mes cuenta si hay gastos del hogar, aunque esta categoría tenga cero.
+  const baselinePeriods = (sqlite.prepare(
+    `SELECT DISTINCT substr(date,1,7) AS period FROM transactions
+      WHERE household_id=? AND type='gasto' AND date < ?
+      ORDER BY period DESC LIMIT ?`,
+  ).all(householdId, start, monthsBack) as { period: string }[]).map(r => r.period);
+  const baselineMonths = baselinePeriods.length;
+  const placeholders = baselinePeriods.map(() => '?').join(',') || 'NULL';
 
   const current = sqlite
     .prepare(
@@ -502,16 +508,16 @@ export function categoryTrends(householdId: string, period: string, monthsBack =
     .prepare(
       `SELECT t.category_id, SUM(t.amount_minor) AS total
          FROM transactions t
-        WHERE t.household_id = ? AND t.type = 'gasto' AND t.date BETWEEN ? AND ? AND ${habitualExpenseSql}
+        WHERE t.household_id = ? AND t.type = 'gasto' AND substr(t.date,1,7) IN (${placeholders}) AND ${habitualExpenseSql}
         GROUP BY t.category_id`,
     )
-    .all(householdId, baselineStart, baselineEnd) as Array<{
+    .all(householdId, ...baselinePeriods) as Array<{
       category_id: string | null; total: number;
     }>;
 
   const baselineMap = new Map<string, number>();
   for (const b of baseline) {
-    baselineMap.set(b.category_id ?? 'null', Math.round(b.total / monthsBack));
+    baselineMap.set(b.category_id ?? 'null', Math.round(b.total / baselineMonths));
   }
 
   const summary = monthlySummary(householdId, period);
@@ -519,10 +525,10 @@ export function categoryTrends(householdId: string, period: string, monthsBack =
     const row = sqlite
       .prepare(
         `SELECT COALESCE(SUM(amount_minor), 0) AS total FROM transactions
-          WHERE household_id = ? AND type = 'ingreso' AND date BETWEEN ? AND ?`,
+          WHERE household_id = ? AND type = 'ingreso' AND substr(date,1,7) IN (${placeholders})`,
       )
-      .get(householdId, baselineStart, baselineEnd) as { total: number };
-    return Math.round(row.total / monthsBack);
+      .get(householdId, ...baselinePeriods) as { total: number };
+    return baselineMonths ? Math.round(row.total / baselineMonths) : 0;
   })();
 
   return current
@@ -535,6 +541,7 @@ export function categoryTrends(householdId: string, period: string, monthsBack =
         currentMinor: c.total,
         habitualMinor: c.habitual,
         baselineMinor,
+        baselinePeriods,
         changePct:
           baselineMinor > 0
             ? Math.round(((c.habitual - baselineMinor) / baselineMinor) * 1000) / 10

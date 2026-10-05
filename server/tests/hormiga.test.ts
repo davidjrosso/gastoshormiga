@@ -6,7 +6,7 @@
  * saca exactamente una y verifica que el gasto deje de aparecer.
  */
 import assert from 'node:assert/strict';
-import { before, describe, it } from 'node:test';
+import { after, before, describe, it, mock } from 'node:test';
 import { addMonthlyIncome, addTx, daysAgo, makeHousehold, makeMerchant, type Fixture } from './harness.js';
 import { detectHormiga, detectSubscriptions, monthlySummary } from '../src/analytics/hormiga.js';
 
@@ -17,6 +17,7 @@ const UMBRAL = 500_000;
 let f: Fixture;
 
 before(() => {
+  mock.timers.enable({ apis: ['Date'], now: new Date('2026-09-25T12:00:00Z') });
   f = makeHousehold();
   addMonthlyIncome(f, INGRESO_MENSUAL);
 
@@ -44,6 +45,8 @@ before(() => {
   const regalo = makeMerchant(f.householdId, 'Regalo');
   addTx(f, { date: daysAgo(10), amountMinor: 490_000, merchantId: regalo });
 });
+
+after(() => mock.timers.reset());
 
 describe('detectHormiga', () => {
   const nombres = () => detectHormiga(f.householdId, 3).map((h) => h.merchantName);
