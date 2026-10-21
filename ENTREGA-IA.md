@@ -1,33 +1,35 @@
-# Hormiga 0.7.3: comparación de categorías y manual de tarjetas
+# Hormiga 0.8.0 — Qué compramos y para quién
 
-Preparado localmente sobre main 7778c09 (0.7.2 desplegada). Sin despliegue de 0.7.3.
-Server/web y ambos lockfiles actualizados a 0.7.3; esquema v8 sin cambios.
+Base: main e37bcd7 (0.7.3). David autorizó implementar el replanteo y subirlo
+ directamente a producción el 21/10/2026. Estado del despliegue: consultar
+ CONTEXTO.local.md y el registro privado .local/contabo/HORMIGA-0.8.0-DESPLIEGUE.md.
 
-"En qué se fue" compara gasto habitual con el promedio de hasta tres meses previos
-que tengan gastos del hogar. Omite meses sin gastos registrados; cuenta el cero de
-una categoría cuando sí hubo otros gastos en ese mes. Muestra meses de referencia,
-promedio y aviso de mes en curso. Conserva orden por monto descendente y exclusión
-de eventos extraordinarios del gasto habitual. Un mes con registros puede estar incompleto.
+Carga y edición de gastos: concepto, destinatario independiente del pagador,
+categoría, cantidad/unidad opcionales y desglose cuyo total debe coincidir.
+Comercio opcional; creación de categorías desde la carga. Categorías personales
+históricas se sugieren como destinatarios, pendientes de revisión. No se
+reescriben categorías, importes ni descripciones antiguas durante la migración.
 
-Manual de uso: docs/MANUAL-TARJETAS.md, desde PDF y revisión hasta incorporación al
-hogar, pagos de adicionales y cuotas futuras. Pruebas nuevas: category-trends.test.ts.
-Las pruebas de detectores usan una fecha fija para evitar fallas al iniciar el mes.
+Resumen: categorías, conceptos, destinatarios, pagadores, repeticiones habituales
+y pendientes de revisión. Orden descendente por importe, ARS/USD separados.
+Gastos imputados conserva fecha de cierre. Consumos por fecha usa la fecha del
+banco para consumos sin cuotas; excluye cuotas y conserva cargos por imputación.
+No calcula el valor total supuesto de una compra en cuotas ni lo duplica.
+Se muestran cobertura por origen y mes, y aviso de mes en curso; se retiran las
+variaciones automáticas sobre períodos no comparables.
 
-## Antecedente 0.7.2 (ya desplegado)
+Tarjetas: nombre entendible del consumo sin cambiar documento bancario.
+Aplicación opcional a cuotas de la misma compra por identidad exacta existente;
+reglas para próximas cuotas. Nunca propagar a todo un comercio. Cantidades y
+partes no se propagan. Cuotas comprometidas usa el concepto identificado.
+Comprado, lista de compras, VEA/ML y eventos conservan su funcionamiento.
 
-Base: main 72b22a3 (0.7.1, desplegada con la comparación VEA / ML). Rama fix/ml-busqueda.
-David reportó que al buscar en ML a veces aparecía "Sin ofertas" aunque la app de ML mostraba
-productos. Diagnóstico con su cuenta (30/09/2026): no es intermitente; el catálogo devuelve
-primero fichas sin ofertas o sin Full, y Hormiga solo miraba las primeras 6 y 20 ofertas.
-
-Cambios: la búsqueda revisa hasta 30 fichas y 100 ofertas por ficha, ordena primero las Full
-más baratas, acepta enlaces de ficha /p/MLA… pegados desde la app y, si no hay Full, lo
-explica y ofrece abrir la búsqueda en ML. La comparación también lee ofertas paginadas.
-Sin migraciones ni dependencias nuevas; esquema v8 sin cambios. Detalle: docs/ML.md.
-
-Server/web y lockfiles 0.7.2. Pruebas server (incluye regresión del caso diagnosticado),
-cliente, typecheck y builds APP_BASE=hormiga correctos.
-
-0.7.2 desplegada el 30/09/2026. Parches de seguridad de claude/SEGURIDAD-2026-09-29.md siguen pendientes.
-Antes de desplegar: autorización, estado real/commit, backup consistente, builds Linux,
-código/assets previos. Reiniciar solo Hormiga y comprobar Ticketera. Nunca reemplazar PROD por DEV.
+Versión 0.8.0 en server/web y lockfiles. Esquema v9: solo agrega expense_details
+ y card_concept_rules; tablas previas intactas. No se puede volver a un binario
+v8 sobre una base v9: cualquier reversión requiere revisión explícita.
+Sin dependencias nuevas. Tests nuevos: server/tests/expenses.test.ts.
+Manual del nuevo flujo: docs/CONSUMOS.md. Manual de tarjetas actualizado.
+Pruebas requeridas: typecheck/test/build server, test/build web APP_BASE=hormiga,
+QA de formulario y Resumen con datos ficticios, migración en copia consistente,
+comparación exacta de todas las tablas previas, API autenticada de producción.
+No publicar datos del hogar ni documentación privada de infraestructura.

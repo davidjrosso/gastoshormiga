@@ -5,6 +5,7 @@ import { requireAuth, type AppEnv } from '../auth.js';
 import { accountBalances } from '../analytics/savings.js';
 import { db } from '../db/index.js';
 import { accounts, categories, merchants, transactions } from '../db/schema.js';
+import { categoryUsedByExpenses } from '../expenses.js';
 import { normalizeMerchantName, parseAmountToMinor } from '../lib/money.js';
 
 export const dataRoutes = new Hono<AppEnv>();
@@ -156,7 +157,7 @@ dataRoutes.delete('/categories/:id', (c) => {
     .limit(1)
     .all();
 
-  if (enUso.length > 0) {
+  if (enUso.length > 0 || categoryUsedByExpenses(user.householdId,id)) {
     db.update(categories).set({ archived: true }).where(eq(categories.id, id)).run();
     return c.json({ accion: 'archivada' });
   }

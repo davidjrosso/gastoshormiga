@@ -9,8 +9,20 @@ import { installmentForecast } from '../analytics/installments.js';
 import { fetchRate, getLatestRates, upsertRate, type RateType } from '../fx/rates.js';
 import { parseAmountToMinor, shiftPeriod, todayISO } from '../lib/money.js';
 
+import { expenseOverview, expenseOptions } from '../expenses.js';
+
 export const analyticsRoutes = new Hono<AppEnv>();
 analyticsRoutes.use('*', requireAuth);
+
+analyticsRoutes.get('/expense-options', c => c.json(expenseOptions(c.get('user').householdId)));
+analyticsRoutes.get('/expenses', c => {
+  const period=c.req.query('period') ?? todayISO().slice(0,7);
+  const currency=c.req.query('currency') ?? 'ARS';
+  const basis=c.req.query('basis') ?? 'booked';
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(period) || !['ARS','USD'].includes(currency) || !['booked','consumed'].includes(basis)) return c.json({error:'Filtro inválido'},400);
+  c.header('Cache-Control','no-store');
+  return c.json(expenseOverview(c.get('user').householdId,period,currency as 'ARS'|'USD',basis as 'booked'|'consumed'));
+});
 
 const currentPeriod = () => todayISO().slice(0, 7);
 

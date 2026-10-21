@@ -271,6 +271,20 @@ const MIGRATIONS: string[] = [
     code_verifier_enc TEXT NOT NULL, created_at INTEGER NOT NULL
   );
   `,
+  // v9: optional descriptions and splits. Original financial rows stay intact.
+  `
+  CREATE TABLE expense_details (
+    transaction_id TEXT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    data_json TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE TABLE card_concept_rules (
+    household_id TEXT NOT NULL REFERENCES households(id),
+    purchase_key TEXT NOT NULL,
+    data_json TEXT NOT NULL,
+    PRIMARY KEY(household_id, purchase_key)
+  );
+  `,
 ];
 
 export function runMigrations(db: BetterSqlite3.Database): { from: number; to: number } {

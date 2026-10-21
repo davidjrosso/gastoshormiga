@@ -1,6 +1,7 @@
 import { sqlite } from '../db/index.js';
 import { shiftPeriod, todayISO } from '../lib/money.js';
 import type { StatementDocument } from '../statements/model.js';
+import { inheritedConcept } from '../expenses.js';
 import { inheritedEvent } from '../events.js';
 
 /** A confirmed statement is a complete snapshot of a card's billed plans.
@@ -15,13 +16,14 @@ export function installmentForecast(household: string, period: string, months = 
       AND newer.status = 'confirmed' AND newer.close_date > s.close_date)
     ORDER BY a.name, s.id`).all(household) as { id: string; document_json: string; accountName: string }[];
   const links = sqlite.prepare(`SELECT l.statement_id, l.line_id, t.amount_minor, t.currency,
-    t.paid_by_user_id AS userId, u.display_name AS userName, l.holder AS allocationHolder
+    d.data_json AS expenseJson, t.paid_by_user_id AS userId, u.display_name AS userName, l.holder AS allocationHolder
     FROM card_movement_links l JOIN transactions t ON t.id = l.transaction_id
+    LEFT JOIN expense_details d ON d.transaction_id=t.id
     JOIN card_statements s ON s.id = l.statement_id
     LEFT JOIN users u ON u.id = t.paid_by_user_id AND u.household_id = t.household_id
     WHERE t.household_id = ? AND s.household_id = ?`).all(household, household) as {
       statement_id: string; line_id: string; amount_minor: number; currency: 'ARS' | 'USD'; userId: string; userName: string | null;
-      allocationHolder: string;
+      allocationHolder: string; expenseJson: string | null;
     }[];
   const eventNames = new Map((sqlite.prepare('SELECT id,name FROM events WHERE household_id=?').all(household) as { id: string; name: string }[]).map(e => [e.id, e.name]));
   const sources = rows.map(row => {
@@ -54,7 +56,7 @@ export function installmentForecast(household: string, period: string, months = 
         return source.linked.filter(l => l.line_id === line.id && l.amount_minor > 0 && (!paidBy || l.userId === paidBy) && (eventId === undefined || l.eventId === eventId))
           .map(l => ({
             statementId: source.id, lineId: line.id, accountName: source.accountName,
-            description: line.description, userId: l.userId, userName: l.userName,
+            description: (l.expenseJson ? JSON.parse(l.expenseJson).concept : inheritedConcept(household,source.doc,line,l.allocationHolder)?.concept) || line.description, userId: l.userId, userName: l.userName,
             eventId: l.eventId, eventName: l.eventName,
             amountMinor: l.amount_minor, currency: l.currency,
             n: quota.n + offset, of: quota.of,

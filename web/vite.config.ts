@@ -39,7 +39,7 @@ export default defineConfig({
         scope: APP_BASE,
         name: 'hormiga · economía de casa',
         short_name: 'hormiga',
-        description: 'Control de gastos del hogar, con detección de gasto hormiga y ahorro en dólares.',
+        description: 'Qué compramos, para quién y cuánto gastamos en el hogar.',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',
@@ -62,6 +62,7 @@ export default defineConfig({
           { urlPattern: /\/api\/(?:shopping|auth|ml)(?:\/|$|\?)/, handler: 'NetworkOnly' },
           { urlPattern: /\/api\/events(?:\/|\?|$)/, handler: 'NetworkOnly' },
           { urlPattern: /\/api\/analytics\/installments(?:\?|$)/, handler: 'NetworkOnly' },
+          { urlPattern: /\/api\/analytics\/(?:expenses|expense-options)(?:\?|$)/, handler: 'NetworkOnly' },
           { urlPattern: /\/api\/statements(?:\/|$)/, handler: 'NetworkOnly' },
           {
             urlPattern: /\/api\/.*/,

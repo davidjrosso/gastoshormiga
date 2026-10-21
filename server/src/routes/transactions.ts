@@ -8,6 +8,8 @@ import { getRateForDate, householdRateType } from '../fx/rates.js';
 import { normalizeMerchantName, parseAmountToMinor, periodRange, todayISO } from '../lib/money.js';
 import { assignEvent, EventError, installmentEventKeys, setTransactionEvent, validateEvent } from '../events.js';
 
+import { expenseSchema, expenseDetails, saveExpense, validateExpense, ExpenseError } from '../expenses.js';
+
 export const transactionRoutes = new Hono<AppEnv>();
 transactionRoutes.use('*', requireAuth);
 
@@ -33,6 +35,7 @@ function resolveMerchant(householdId: string, name: string | undefined | null): 
 }
 
 const createSchema = z.object({
+  expense: expenseSchema.optional(),
   type: z.enum(['gasto', 'ingreso', 'transferencia']),
   amount: z.union([z.string(), z.number()]),
   currency: z.enum(['ARS', 'USD']).default('ARS'),
@@ -57,7 +60,7 @@ transactionRoutes.post('/', async (c) => {
 
   if (d.eventId && d.type !== 'gasto') return c.json({ error: 'Los eventos se asignan a gastos.' }, 400);
   try { validateEvent(user.householdId, d.eventId ?? null); }
-  catch (error) { if (error instanceof EventError) return c.json({ error: error.message }, 400); throw error; }
+  catch (error) { if (error instanceof EventError || error instanceof ExpenseError) return c.json({ error: error.message }, 400); throw error; }
 
   let amountMinor: number;
   try {
@@ -66,6 +69,12 @@ transactionRoutes.post('/', async (c) => {
     return c.json({ error: (err as Error).message }, 400);
   }
   if (amountMinor === 0) return c.json({ error: 'El monto no puede ser cero' }, 400);
+
+  if (d.expense) {
+    if (d.type !== 'gasto') return c.json({error:'Los conceptos se asignan a gastos.'},400);
+    try { validateExpense(user.householdId,d.expense,amountMinor); }
+    catch(e) { if(e instanceof ExpenseError) return c.json({error:e.message},400); throw e; }
+  }
 
   // La cuenta tiene que ser de este hogar. Sin esto, alguien con sesión válida
   // podría escribir movimientos en el hogar de otro pasando un id ajeno.
@@ -137,6 +146,7 @@ transactionRoutes.post('/', async (c) => {
     .returning()
     .all()[0];
   if (d.eventId) setTransactionEvent(created.id, d.eventId);
+  if (d.expense) saveExpense(user.householdId,created.id,d.expense);
   return created;
   }).immediate();
 
@@ -154,6 +164,8 @@ transactionRoutes.get('/', (c) => {
   }
 
   const conditions = [eq(transactions.householdId, user.householdId)];
+  const requestedId = c.req.query('id');
+  if (requestedId) conditions.push(eq(transactions.id,requestedId));
   if (period && /^\d{4}-\d{2}$/.test(period)) {
     const { start, end } = periodRange(period);
     conditions.push(gte(transactions.date, start), lte(transactions.date, end));
@@ -202,9 +214,13 @@ transactionRoutes.get('/', (c) => {
 
   const keys = installmentEventKeys(user.householdId);
   return c.json(
-    rows.map((r) => ({
+    rows.map((r) => {
+      const expense=r.tx.type==='gasto'?expenseDetails(r.tx.id,r.tx.categoryId,r.categoryName,r.merchantName):null;
+      const displayCategory=expense?.categoryId?(sqlite.prepare('SELECT name FROM categories WHERE id=? AND household_id=?').get(expense.categoryId,user.householdId) as {name:string}|undefined)?.name:null;
+      return ({
       ...r.tx,
-      categoryName: r.categoryName,
+      expense,
+      categoryName: expense ? (expense.parts.length ? 'Compra desglosada' : displayCategory ?? 'Sin categoría') : r.categoryName,
       categoryColor: r.categoryColor,
       categoryIcon: r.categoryIcon,
       merchantName: r.merchantName,
@@ -213,7 +229,7 @@ transactionRoutes.get('/', (c) => {
       eventId: r.eventId,
       eventName: r.eventName,
       canApplyEventToPurchase: !!keys.get(r.tx.id),
-    })),
+    }); }),
   );
 });
 
@@ -228,6 +244,8 @@ transactionRoutes.get('/', (c) => {
 const updateSchema = z.object({
   eventId: z.string().min(1).nullable().optional(),
   eventAllInstallments: z.boolean().optional(),
+  expense: expenseSchema.optional(),
+  conceptAllInstallments: z.boolean().optional(),
   amount: z.union([z.string(), z.number()]).optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida').optional(),
   categoryId: z.string().nullable().optional(),
@@ -255,12 +273,13 @@ transactionRoutes.patch('/:id', async (c) => {
     if (existing[0].type !== 'gasto') return c.json({ error: 'Los eventos se asignan a gastos.' }, 400);
     const current = sqlite.prepare('SELECT event_id FROM event_transactions WHERE transaction_id=?').get(id) as { event_id: string } | undefined;
     try { validateEvent(user.householdId, d.eventId, current?.event_id); }
-    catch (error) { if (error instanceof EventError) return c.json({ error: error.message }, 400); throw error; }
+    catch (error) { if (error instanceof EventError || error instanceof ExpenseError) return c.json({ error: error.message }, 400); throw error; }
   }
   const linked = sqlite.prepare('SELECT 1 FROM card_movement_links WHERE transaction_id = ?').get(id);
   if (linked && (d.amount !== undefined || d.date !== undefined || d.paidByUserId !== undefined))
     return c.json({ error: 'El importe, la fecha y la persona estan vinculados al resumen de tarjeta. Solo puedes cambiar categoria, evento, comercio y nota.' }, 409);
 
+  if (d.conceptAllInstallments && !d.expense) return c.json({error:'Falta el concepto a aplicar.'},400);
   const updates: Record<string, unknown> = { updatedAt: new Date() };
 
   if (d.amount != null) {
@@ -300,10 +319,19 @@ transactionRoutes.patch('/:id', async (c) => {
         else setTransactionEvent(id, d.eventId);
       }
       if (d.merchantName !== undefined) updates.merchantId = resolveMerchant(user.householdId, d.merchantName);
-      return db.update(transactions).set(updates).where(eq(transactions.id, id)).returning().all()[0];
+      const row = db.update(transactions).set(updates).where(eq(transactions.id, id)).returning().all()[0];
+      if (d.expense) saveExpense(user.householdId,id,d.expense,d.conceptAllInstallments);
+      else if (row.type === 'gasto') {
+        const stored = sqlite.prepare('SELECT data_json FROM expense_details WHERE transaction_id=?').get(id) as {data_json:string}|undefined;
+        if (stored) { const details=expenseSchema.parse(JSON.parse(stored.data_json));
+          if(d.categoryId !== undefined) details.categoryId=d.categoryId;
+          saveExpense(user.householdId,id,details);
+        }
+      }
+      return row;
     }).immediate();
     return c.json(row);
-  } catch (error) { if (error instanceof EventError) return c.json({ error: error.message }, 400); throw error; }
+  } catch (error) { if (error instanceof EventError || error instanceof ExpenseError) return c.json({ error: error.message }, 400); throw error; }
 });
 
 transactionRoutes.delete('/:id', (c) => {

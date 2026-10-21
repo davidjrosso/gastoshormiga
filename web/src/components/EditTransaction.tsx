@@ -1,3 +1,4 @@
+import ExpenseFields, { emptyExpense } from './ExpenseFields';
 import CategoryIcon from './CategoryIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../App';
@@ -27,6 +28,8 @@ export default function EditTransaction({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [expense,setExpense]=useState(tx.expense ?? emptyExpense());
+  const [conceptAllInstallments,setConceptAllInstallments]=useState(false);
   const { me } = useAuth();
   const miembros = me?.members ?? [];
   const esTransferencia = tx.type === 'transferencia';
@@ -65,6 +68,7 @@ export default function EditTransaction({
   // histórico correcto.
   const cambios = useMemo(() => {
     const out: Record<string, unknown> = {};
+    if(tx.type==='gasto' && (JSON.stringify(expense)!==JSON.stringify(tx.expense) || conceptAllInstallments)) {out.expense=expense;out.conceptAllInstallments=conceptAllInstallments;}
     if (eventId !== (tx.eventId ?? null) || eventAllInstallments) {
       out.eventId = eventId; out.eventAllInstallments = eventAllInstallments;
     }
@@ -77,7 +81,7 @@ export default function EditTransaction({
     }
     if (note !== (tx.note ?? '')) out.note = note || null;
     return out;
-  }, [amount, date, categoryId, merchantName, note, paidByUserId, tx, esTransferencia, eventId, eventAllInstallments]);
+  }, [amount, date, categoryId, merchantName, note, paidByUserId, tx, esTransferencia, eventId, eventAllInstallments, expense, conceptAllInstallments]);
 
   const hayCambios = Object.keys(cambios).length > 0;
 
@@ -132,7 +136,9 @@ export default function EditTransaction({
           )}
         </div>
 
-        {!esTransferencia && (
+        {tx.type==='gasto' && <ExpenseFields value={expense} onChange={setExpense} categories={categories} amount={amount} currency={tx.currency as 'ARS'|'USD'}/>}
+        {tx.type==='gasto' && tx.canApplyEventToPurchase && <label className="card mt-3 flex gap-2 text-sm"><input type="checkbox" checked={conceptAllInstallments} onChange={e=>setConceptAllInstallments(e.target.checked)}/>Recordar concepto, categoría y destinatario para las otras cuotas de esta compra, incluidas las futuras. Reemplaza su clasificación; no cambia importes.</label>}
+        {tx.type==='ingreso' && (
           <div className="mt-3">
             <p className="label mb-2">Categoría</p>
             <div className="flex flex-wrap gap-2">
@@ -157,7 +163,7 @@ export default function EditTransaction({
 
         {!esTransferencia && (
           <div className="card mt-3">
-            <label className="label" htmlFor="edit-merchant">Dónde</label>
+            <label className="label" htmlFor="edit-merchant">Comercio o descripción original (opcional)</label>
             <input
               id="edit-merchant" className="input mt-1" list="edit-merchant-list"
               placeholder="Café de la esquina, Coto, Netflix…"

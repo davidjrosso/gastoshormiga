@@ -138,3 +138,10 @@ base de la proyección. Los importes y las monedas se conservan; no se inventan 
 Para la primera carga, conviene hacer hasta **Guardar borrador**, revisar contra el PDF
 y confirmar recién cuando entiendas el reparto. Podés usar ese borrador para consultar
 una diferencia sin que se convierta todavía en gastos.
+
+## Desde Hormiga 0.8.0
+
+En Movimientos o Resumen podés dar un concepto entendible al gasto, asignar
+categoría y destinatario, y distribuir un importe entre detalles. Esto no altera
+el documento bancario. Las reglas para otras cuotas solo se aplican a la misma
+compra identificada. Consultá [la guía de consumos](CONSUMOS.md) para el nuevo flujo.

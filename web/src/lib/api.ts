@@ -77,7 +77,24 @@ export interface Category {
   archived: boolean;
 }
 
+export interface ExpenseDetails {
+ concept:string;recipient:string;categoryId:string|null;quantity:number|null;unit:string;reviewed:boolean;
+ parts:Array<{concept:string;recipient:string;categoryId:string|null;quantity:number|null;unit:string;amountMinor:number}>;
+}
+export interface ExpenseItem {
+ transactionId:string;date:string;bookedDate:string;purchaseDate:string;concept:string;recipient:string;categoryId:string|null;
+ categoryName:string;amountMinor:number;quantity:number|null;unit:string;reviewed:boolean;needsReview:boolean;
+ statementId:string|null;originalDescription:string|null;originalCategory:string|null;installment:{n:number;of:number}|null;paidBy:string;habitual:boolean;
+}
+export interface ExpenseGroup {name:string;amountMinor:number;count:number}
+export interface ExpenseOverview {
+ period:string;currency:'ARS'|'USD';basis:'booked'|'consumed';items:ExpenseItem[];totalMinor:number;count:number;pending:number;
+ categories:ExpenseGroup[];concepts:ExpenseGroup[];recipients:ExpenseGroup[];payers:ExpenseGroup[];repeated:ExpenseGroup[];
+ excludedInstallments:number;coverage:Array<{period:string;manual:number;card:number}>;
+ balances:Array<{currency:'ARS'|'USD';incomeMinor:number;expenseMinor:number}>;
+}
 export interface Transaction {
+  expense: ExpenseDetails | null;
   eventId: string | null;
   eventName: string | null;
   canApplyEventToPurchase: boolean;
@@ -102,6 +119,8 @@ export interface Transaction {
 /** Lo que la pantalla de edición puede cambiar. El tipo y la cuenta no
  *  se tocan: ver el comentario del PATCH en el server. */
 export interface TransactionEdit {
+  expense?: ExpenseDetails;
+  conceptAllInstallments?: boolean;
   eventId?: string | null;
   eventAllInstallments?: boolean;
   amount?: string;
@@ -294,10 +313,13 @@ export const api = {
   deleteCategory: (id: string) =>
     del<{ accion: 'archivada' | 'borrada' }>(`/categories/${id}`),
 
+  expenseOptions: () => get<{concepts:{concept:string;categoryId:string|null}[];recipients:string[]}>('/analytics/expense-options'),
+  expenses: (period:string,currency:string,basis:string) => get<ExpenseOverview>('/analytics/expenses?'+new URLSearchParams({period,currency,basis})),
   merchants: () => get<Array<{ id: string; name: string }>>('/merchants'),
 
-  transactions: (params: { period?: string; type?: string; limit?: number; paidBy?: string; categoryId?: string | null; eventId?: string | null; offset?: number } = {}) => {
+  transactions: (params: { id?: string; period?: string; type?: string; limit?: number; paidBy?: string; categoryId?: string | null; eventId?: string | null; offset?: number } = {}) => {
     const q = new URLSearchParams();
+    if (params.id) q.set('id',params.id);
     if (params.period) q.set('period', params.period);
     if (params.type) q.set('type', params.type);
     if (params.limit) q.set('limit', String(params.limit));

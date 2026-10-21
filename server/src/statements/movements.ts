@@ -5,6 +5,8 @@ import { normalizeMerchantName } from '../lib/money.js';
 import { holderKey, type StatementDocument } from './model.js';
 import { inheritedEvent, setTransactionEvent } from '../events.js';
 
+import { inheritedConcept, saveExpense } from '../expenses.js';
+
 export class MovementError extends Error {}
 export type MovementMapping = { holder: string; userId: string | null };
 
@@ -80,6 +82,8 @@ export function postStatementMovements(household: string, statementId: string, d
     sqlite.prepare('INSERT INTO card_movement_links VALUES (?, ?, ?, ?)').run(statementId, line.id, holder, id);
     const event = inheritedEvent(household, doc, line, holder);
     if (event) setTransactionEvent(id, event);
+    const concept = inheritedConcept(household,doc,line,holder);
+    if(concept) saveExpense(household,id,concept);
     created++;
   }
   return { created, linked: existing.length + created };

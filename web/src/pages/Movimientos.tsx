@@ -182,7 +182,8 @@ export default function Movimientos() {
                 <div className="min-w-0 flex-1">
                   {t.eventName && <p className="truncate text-xs text-ant">Evento: {t.eventName}</p>}
                   <p className="truncate text-sm font-medium">
-                    {t.merchantName ?? t.note ?? t.categoryName ?? 'Sin detalle'}
+                    {t.expense?.concept || t.merchantName || t.note || t.categoryName || 'Sin detalle'}
+                    {t.expense?.recipient && <span className="ml-2 text-xs text-ink-mute">Para {t.expense.recipient}</span>}
                   </p>
                   <p className="truncate text-xs text-ink-mute dark:text-slate-400">
                     {t.type === 'transferencia'

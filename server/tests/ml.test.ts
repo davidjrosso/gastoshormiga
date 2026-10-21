@@ -83,14 +83,14 @@ async function connect(app: Hono, f: Fixture) {
 test('v8 migration only adds store account tables, keeps v7 data and rejects downgrade', () => {
   const db = new Database(':memory:');
   try {
-    runMigrations(db); db.exec('DROP TABLE store_oauth_pending; DROP TABLE store_accounts; PRAGMA user_version=7');
+    runMigrations(db); db.exec('DROP TABLE card_concept_rules; DROP TABLE expense_details; DROP TABLE store_oauth_pending; DROP TABLE store_accounts; PRAGMA user_version=7');
     db.exec("INSERT INTO households(id,name) VALUES('h','Casa'); INSERT INTO shopping_items VALUES('h','i','{}',1,1)");
     const before = db.prepare('SELECT * FROM shopping_items').all();
-    assert.deepEqual(runMigrations(db), { from: 7, to: 8 });
+    assert.deepEqual(runMigrations(db), { from: 7, to: 9 });
     assert.deepEqual(db.prepare('SELECT * FROM shopping_items').all(), before);
-    assert.deepEqual(runMigrations(db), { from: 8, to: 8 });
+    assert.deepEqual(runMigrations(db), { from: 9, to: 9 });
     assert.equal(db.pragma('integrity_check', { simple: true }), 'ok');
-    db.pragma('user_version=9'); assert.throws(() => runMigrations(db), /más viejo/);
+    db.pragma('user_version=10'); assert.throws(() => runMigrations(db), /más viejo/);
   } finally { db.close(); }
 });
 

@@ -1,3 +1,4 @@
+import ExpenseFields, { emptyExpense } from './ExpenseFields';
 import CategoryIcon from './CategoryIcon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../App';
@@ -18,6 +19,7 @@ type Kind = 'gasto' | 'ingreso' | 'transferencia';
  * fecha de hoy por defecto y escondida, y guardar disponible apenas hay monto.
  */
 export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const [expense,setExpense]=useState(emptyExpense);
   const [kind, setKind] = useState<Kind>('gasto');
   const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState<string | null>(null);
@@ -91,11 +93,12 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
     try {
       await api.createTransaction({
         type: kind,
+        ...(kind==='gasto'?{expense}:{}),
         amount,
         currency: fromAccount?.currency ?? 'ARS',
         date,
         accountId,
-        categoryId: kind === 'transferencia' ? null : categoryId,
+        categoryId: kind === 'gasto' ? expense.categoryId : kind === 'transferencia' ? null : categoryId,
         eventId: kind === 'gasto' ? eventId : null,
         merchantName: merchantName || null,
         note: note || null,
@@ -178,7 +181,8 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
           )}
         </div>
 
-        {kind !== 'transferencia' && (
+        {kind === 'gasto' && <ExpenseFields value={expense} onChange={setExpense} categories={categories} amount={amount} currency={fromAccount?.currency as 'ARS'|'USD'}/>}
+        {kind === 'ingreso' && (
           <div className="mt-3">
             <p className="label mb-2">Categoría</p>
             <div className="flex flex-wrap gap-2">
@@ -250,7 +254,7 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
           </div>
         ) : (
           <div className="card mt-3">
-            <label className="label" htmlFor="merchant">Dónde</label>
+            <label className="label" htmlFor="merchant">Comercio (opcional)</label>
             <input
               id="merchant" className="input mt-1" list="merchant-list"
               placeholder="Café de la esquina, Coto, Netflix…"
@@ -261,8 +265,7 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
               {merchants.map((m) => <option key={m} value={m} />)}
             </datalist>
             <p className="mt-2 text-xs text-ink-mute dark:text-slate-400">
-              Poner el comercio es lo que después permite detectar el gasto hormiga.
-              Sin esto solo vas a ver "Café y kiosco: mucha plata".
+              El análisis se organiza por lo que comprás. Podés dejar el comercio vacío.
             </p>
           </div>
         )}
@@ -312,7 +315,7 @@ export default function QuickAdd({ onClose, onSaved }: { onClose: () => void; on
 
         <div className="sticky bottom-0 mt-4 flex gap-2 bg-slate-100 py-3 dark:bg-slate-950">
           <button className="btn-ghost flex-1" onClick={onClose}>Cancelar</button>
-          <button className="btn-primary flex-[2]" onClick={save} disabled={busy || !amount}>
+          <button className="btn-primary flex-[2]" onClick={save} disabled={busy || !amount || (kind==='gasto' && expense.reviewed && !expense.concept.trim())}>
             {busy ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
